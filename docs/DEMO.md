@@ -30,8 +30,9 @@ Variation (no replacement): take Scout B offline before starting, then Scout A w
 
 ## 4. Denial (about 30 s)
 
-1. Submit a second work order and start it.
-2. At the approval card, click **Reject** with a comment. No repair command is sent, verification is skipped, and the mission closes as **unresolved**, saying that the defect remains open.
+1. Tick **Simulated defect present on T-101** in the Fleet panel. The first mission repaired the simulated tank; without this the new inspection finds no defect and the mission closes as "no action needed".
+2. Submit a second work order and start it.
+3. At the approval card, click **Reject** with a comment. No repair command is sent, verification is skipped, and the mission closes as **unresolved**, saying that the defect remains open.
 
 ## 5. Wrap-up (about 30 s)
 
