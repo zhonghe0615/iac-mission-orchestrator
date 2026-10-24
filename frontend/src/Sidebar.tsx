@@ -105,7 +105,7 @@ export function NewMissionForm({
           action.run(async () => onCreated(await api.createMission(workOrder, planner, operator)))
         }
       >
-        {action.busy ? "Planning…" : "Generate plan"}
+        {action.busy ? "Submitting…" : "Generate plan"}
       </button>
       <ErrorBox error={action.error} />
     </section>

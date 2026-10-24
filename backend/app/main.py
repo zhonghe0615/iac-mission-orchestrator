@@ -186,7 +186,8 @@ def create_app(settings: Settings | None = None, planners: dict[str, Planner] | 
         engine = engine_of(request)
 
         async def run() -> dict:
-            mission_id = await engine.create_mission(body.work_order, body.planner, body.actor)
+            # Returns at once with status "planning"; the stream announces when the plan is ready.
+            mission_id = await engine.submit_mission(body.work_order, body.planner, body.actor)
             return engine.mission_detail(mission_id)
 
         return await idempotent(request, body, run, code=201)

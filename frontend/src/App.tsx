@@ -104,6 +104,8 @@ export default function App() {
             config={config}
             operator={operator}
             onCreated={(d) => {
+              // Update the ref first: refresh() reads it before React re-renders.
+              selectedRef.current = d.mission.id;
               setSelected(d.mission.id);
               setDetail(d);
               refresh();

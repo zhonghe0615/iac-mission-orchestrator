@@ -81,6 +81,7 @@ class Engine:
         self._outbox: list[_Outbox] = []
         self._timers: dict[str, asyncio.Task] = {}
         self._worker: asyncio.Task | None = None
+        self._background: set[asyncio.Task] = set()
         self._loop: asyncio.AbstractEventLoop | None = None
         # Set when a robot may have become available; waiting missions are re-checked before commit.
         self._robots_freed = False
@@ -93,7 +94,8 @@ class Engine:
         self._worker = asyncio.create_task(self._consume_events())
 
     async def stop(self) -> None:
-        for t in [self._worker, *self._timers.values()]:
+        # Unfinished planning is marked failed on the next start (see _recover).
+        for t in [self._worker, *self._timers.values(), *self._background]:
             if t:
                 t.cancel()
         self._timers.clear()
@@ -166,6 +168,20 @@ class Engine:
     # Operator commands
 
     async def create_mission(self, work_order: str, planner_mode: str, actor: str) -> str:
+        """Create a mission and wait for its plan."""
+        mission_id = await self._record_mission(work_order, planner_mode, actor)
+        await self._plan_mission(mission_id, work_order, planner_mode)
+        return mission_id
+
+    async def submit_mission(self, work_order: str, planner_mode: str, actor: str) -> str:
+        """Create a mission and plan it in the background; the mission starts in "planning"."""
+        mission_id = await self._record_mission(work_order, planner_mode, actor)
+        task = asyncio.create_task(self._plan_mission(mission_id, work_order, planner_mode))
+        self._background.add(task)
+        task.add_done_callback(self._background.discard)
+        return mission_id
+
+    async def _record_mission(self, work_order: str, planner_mode: str, actor: str) -> str:
         planner = self.planners.get(planner_mode)
         if planner is None:
             raise EngineError(f"planner mode '{planner_mode}' is not configured; available: {sorted(self.planners)}")
@@ -188,6 +204,10 @@ class Engine:
             self._event(mission_id, "planning_started", f"Planning with {planner.label}", planner_mode=planner_mode)
 
         await self._locked(create)
+        return mission_id
+
+    async def _plan_mission(self, mission_id: str, work_order: str, planner_mode: str) -> None:
+        planner = self.planners[planner_mode]
         try:
             outcome = await planner.plan(work_order)
         except Exception as exc:
@@ -217,7 +237,6 @@ class Engine:
             self._event(mission_id, "plan_validated", f"Plan v{version} produced by {planner.label} passed validation")
 
         await self._locked(finish)
-        return mission_id
 
     async def update_plan(self, mission_id: str, plan_data: Any, actor: str) -> int:
         def update() -> int:

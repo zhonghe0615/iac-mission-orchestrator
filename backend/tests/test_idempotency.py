@@ -44,6 +44,7 @@ def test_key_reused_with_a_different_body_is_rejected(tmp_path):
 def test_repeated_approval_is_replayed_not_reapplied(tmp_path):
     with TestClient(create_app(settings(tmp_path))) as client:
         mid = client.post("/api/missions", json=WORK_ORDER).json()["mission"]["id"]
+        wait_for_status(client, mid, "ready")
         client.post(f"/api/missions/{mid}/start", json={})
         wait_for_status(client, mid, "waiting_approval")
         url = f"/api/missions/{mid}/tasks/t3/decision"
@@ -72,6 +73,7 @@ def test_same_key_for_different_endpoints_is_independent(tmp_path):
     with TestClient(create_app(settings(tmp_path))) as client:
         headers = {"Idempotency-Key": "shared"}
         mid = client.post("/api/missions", json=WORK_ORDER, headers=headers).json()["mission"]["id"]
+        wait_for_status(client, mid, "ready")
         started = client.post(f"/api/missions/{mid}/start", json={}, headers=headers)
         assert started.status_code == 200 and "Idempotent-Replayed" not in started.headers
 
@@ -97,10 +99,22 @@ async def test_concurrent_duplicate_is_executed_once(tmp_path):
                 client.post("/api/missions", json=body, headers=headers),
                 client.post("/api/missions", json=body, headers=headers),
             )
-            assert sorted([first.status_code, second.status_code]) == [201, 409]
+            # The duplicate is either told the first is still running, or gets its stored response.
+            codes = sorted([first.status_code, second.status_code])
+            assert codes in ([201, 201], [201, 409]), codes
             replay = await client.post("/api/missions", json=body, headers=headers)
             assert replay.status_code == 201 and replay.headers["Idempotent-Replayed"] == "true"
             assert len((await client.get("/api/missions")).json()) == 1
+
+            # Creation returns before the slow planner finishes; the plan arrives later.
+            created = replay.json()["mission"]
+            assert created["status"] == "planning"
+            for _ in range(100):
+                status = (await client.get(f"/api/missions/{created['id']}")).json()["mission"]["status"]
+                if status == "ready":
+                    break
+                await asyncio.sleep(0.02)
+            assert status == "ready"
 
 
 def test_unfinished_key_is_released_for_retry(tmp_path):

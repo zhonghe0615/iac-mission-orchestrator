@@ -46,6 +46,7 @@ def test_operator_flow_over_http(tmp_path):
         )
         assert created.status_code == 201
         mid = created.json()["mission"]["id"]
+        wait_for_status(client, mid, "ready")
 
         bad = client.put(f"/api/missions/{mid}/plan", json={"plan": {"summary": "x", "target": "tank-T101", "tasks": []}})
         assert bad.status_code == 422 and bad.json()["errors"]
