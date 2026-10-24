@@ -76,6 +76,7 @@ export interface Task {
   plan_version: number;
   requires_approval: boolean;
   risk: string;
+  role: string;
   attempts: Attempt[];
 }
 
@@ -156,6 +157,10 @@ export interface Config {
 
 export type Metrics = Record<string, unknown>;
 
+export interface SiteContext {
+  actions: { name: string; role: string; requires_approval: boolean }[];
+}
+
 export class ApiError extends Error {
   constructor(message: string, public errors: string[] = []) {
     super(message);
@@ -211,6 +216,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 
 export const api = {
   config: () => request<Config>("GET", "/api/config"),
+  site: () => request<SiteContext>("GET", "/api/site"),
   robots: () => request<RobotsResponse>("GET", "/api/robots"),
   fleetEvents: () => request<AuditEvent[]>("GET", "/api/fleet-events"),
   missions: () => request<Mission[]>("GET", "/api/missions"),

@@ -68,6 +68,10 @@ def test_operator_flow_over_http(tmp_path):
             "scout-b": "available",
             "manipulator-c": "available",
         }
+        armed = client.post("/api/sim/robots/scout-b/fault", json={"fault": "fail_next"}).json()
+        assert armed["simulator"]["robots"]["scout-b"]["pending_faults"] == ["fail_next"]
+        cleared = client.post("/api/sim/robots/scout-b/fault", json={"fault": "clear"}).json()
+        assert cleared["simulator"]["robots"]["scout-b"]["pending_faults"] == []
         assert client.post("/api/sim/robots/scout-a/fault", json={"fault": "offline"}).status_code == 200
         assert client.get("/api/robots").json()["robots"][0]["availability"] == "offline"
         assert client.get("/api/metrics").json()["missions_by_status"] == {"resolved": 1}

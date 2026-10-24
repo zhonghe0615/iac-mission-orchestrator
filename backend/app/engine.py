@@ -908,6 +908,7 @@ class Engine:
             spec = ACTIONS[t["action"]]
             t["requires_approval"] = spec.requires_approval
             t["risk"] = spec.risk
+            t["role"] = spec.role
             t["attempts"] = [a for a in attempts if a["task_id"] == t["task_id"]]
         versions = self.store.plan_versions(mission_id)
         return {

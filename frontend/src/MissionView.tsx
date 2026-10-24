@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { api, AuditEvent, Evidence, MissionDetail, Plan, Robot, Task } from "./api";
+import { api, AuditEvent, Evidence, MissionDetail, Plan, Robot, SiteContext, Task } from "./api";
+import { buildSteps, ProgressBar } from "./ProgressBar";
 import { ErrorBox, label, Pill, seconds, time, useAction } from "./ui";
 
 const PRE_START = ["ready", "planning_failed"];
@@ -50,11 +51,13 @@ function explain(detail: MissionDetail): { headline: string; reason: string; nex
 export function MissionView({
   detail,
   robots,
+  site,
   operator,
   onChange,
 }: {
   detail: MissionDetail;
   robots: Robot[];
+  site: SiteContext | null;
   operator: string;
   onChange: () => void;
 }) {
@@ -99,6 +102,8 @@ export function MissionView({
         </div>
       </div>
       <ErrorBox error={action.error} />
+
+      <ProgressBar steps={buildSteps(detail, site, new Map(robots.map((r) => [r.id, r.name])))} />
 
       <div className={`banner status-${m.status}`}>
         <strong>{info.headline}</strong>

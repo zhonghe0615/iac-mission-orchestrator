@@ -174,6 +174,10 @@ class SimulatedFleet:
             raise ValueError(f"unknown fault '{fault}'")
         self.robots[robot_id].pending_faults.add(fault)
 
+    def clear_faults(self, robot_id: str) -> None:
+        """Disarm faults that have not been used by a command yet."""
+        self.robots[robot_id].pending_faults.clear()
+
     def set_defect(self, asset_id: str, present: bool) -> None:
         self.assets[asset_id] = SimAsset(defect_present=present)
 
@@ -182,7 +186,8 @@ class SimulatedFleet:
             "robots": {
                 rid: {
                     "online": r.online,
-                    "pending_faults": sorted(r.pending_faults),
+                    # In the order they apply: one per command.
+                    "pending_faults": [f for f in NEXT_COMMAND_FAULTS if f in r.pending_faults],
                     "active_commands": sorted(r.active),
                 }
                 for rid, r in self.robots.items()

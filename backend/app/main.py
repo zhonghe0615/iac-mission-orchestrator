@@ -48,7 +48,7 @@ class Decision(BaseModel):
 
 
 class Fault(BaseModel):
-    fault: Literal["offline", "online", "fail_next", "hang_next", "duplicate_next", "reorder_next"]
+    fault: Literal["offline", "online", "fail_next", "hang_next", "duplicate_next", "reorder_next", "clear"]
     actor: str = Actor
 
 
@@ -256,6 +256,9 @@ def create_app(settings: Settings | None = None, planners: dict[str, Planner] | 
         elif body.fault == "online":
             await sim.set_online(robot_id, True)
             await engine.restore_robot(robot_id, body.actor)
+        elif body.fault == "clear":
+            sim.clear_faults(robot_id)
+            engine._notify()
         else:
             sim.arm_fault(robot_id, body.fault)
             engine._notify()

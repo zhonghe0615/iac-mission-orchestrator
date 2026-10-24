@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api, Config, Metrics, Mission, MissionDetail, RobotsResponse, AuditEvent } from "./api";
+import { api, Config, Metrics, Mission, MissionDetail, RobotsResponse, AuditEvent, SiteContext } from "./api";
 import { FleetPanel, MetricsPanel, MissionList, NewMissionForm } from "./Sidebar";
 import { MissionView } from "./MissionView";
 
@@ -15,6 +15,7 @@ function loadOperator(): string {
 
 export default function App() {
   const [config, setConfig] = useState<Config | null>(null);
+  const [site, setSite] = useState<SiteContext | null>(null);
   const [missions, setMissions] = useState<Mission[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [detail, setDetail] = useState<MissionDetail | null>(null);
@@ -45,6 +46,7 @@ export default function App() {
 
   useEffect(() => {
     api.config().then(setConfig).catch((e) => setLoadError(String(e)));
+    api.site().then(setSite).catch((e) => setLoadError(String(e)));
   }, []);
 
   useEffect(() => {
@@ -117,6 +119,7 @@ export default function App() {
               key={detail.mission.id}
               detail={detail}
               robots={robots?.robots ?? []}
+              site={site}
               operator={operator}
               onChange={refresh}
             />

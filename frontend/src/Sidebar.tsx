@@ -86,12 +86,37 @@ export function MissionList({
   );
 }
 
-const FAULTS: { fault: string; text: string; title: string }[] = [
-  { fault: "fail_next", text: "Fail next", title: "Next command reports an explicit failure" },
-  { fault: "hang_next", text: "Time out next", title: "Next command responds only after its deadline" },
-  { fault: "duplicate_next", text: "Duplicate next", title: "Next completion event is delivered twice" },
-  { fault: "reorder_next", text: "Reorder next", title: "Next 'accepted' event arrives after completion" },
+// Faults are armed per robot and used one per command, in this order.
+const FAULTS: { fault: string; text: string; help: string }[] = [
+  {
+    fault: "fail_next",
+    text: "Fail next",
+    help: "The next command reports an explicit error. Expect: an inspection is retried on another robot; a repair escalates to you.",
+  },
+  {
+    fault: "hang_next",
+    text: "Time out next",
+    help: "The next command stays silent past its deadline, then answers late. Expect: timed out → robot marked unresponsive → work moves to another robot → the late result is ignored.",
+  },
+  {
+    fault: "duplicate_next",
+    text: "Duplicate next",
+    help: "The next 'completed' message is delivered twice. Expect: the copy is ignored; no double evidence or transition.",
+  },
+  {
+    fault: "reorder_next",
+    text: "Reorder next",
+    help: "The next 'accepted' message arrives after 'completed'. Expect: the out-of-order message is ignored.",
+  },
 ];
+const FAULT_TEXT = new Map(FAULTS.map((f) => [f.fault, f.text]));
+const AVAILABILITY_HELP: Record<string, string> = {
+  offline: "Takes the robot offline now. Work in progress is lost: an inspection is retried elsewhere; a repair pauses for you because its outcome is unknown.",
+  online: "Brings the robot back online now. Missions waiting for a robot continue automatically.",
+  healthy: "Clears the unresponsive mark after a timeout, asserting the robot is usable again.",
+  clear: "Disarms faults that have not been used yet.",
+};
+const FLEET_HELP = "Fault buttons apply to a robot's next command, one per command. Hover one to see what it does.";
 
 // Types with more robots than this start collapsed and show a filtered, capped list.
 const EXPANDED_LIMIT = 8;
@@ -119,6 +144,7 @@ export function FleetPanel({
   return (
     <section className="panel">
       <h3>Fleet</h3>
+      <p className="hint">{FLEET_HELP}</p>
       {robots.types.map((t) => (
         <RobotTypeGroup
           key={t.id}
@@ -226,6 +252,13 @@ function RobotRow({
   sim: RobotsResponse["simulator"]["robots"][string];
   onFault: (robotId: string, fault: string) => void;
 }) {
+  const [help, setHelp] = useState<string | null>(null);
+  const explain = (text: string) => ({
+    onMouseEnter: () => setHelp(text),
+    onMouseLeave: () => setHelp(null),
+    onFocus: () => setHelp(text),
+    onBlur: () => setHelp(null),
+  });
   return (
     <div className="robot">
       <div className="robot-head">
@@ -239,29 +272,42 @@ function RobotRow({
       )}
       {r.health_reason && <div className="hint warn-text">{r.health_reason}</div>}
       {sim.pending_faults.length > 0 && (
-        <div className="hint warn-text">Armed: {sim.pending_faults.map(label).join(", ")}</div>
+        <div className="hint warn-text armed">
+          Armed for next commands:{" "}
+          {sim.pending_faults.map((f, i) => `${i + 1}. ${FAULT_TEXT.get(f) ?? f}`).join("  ")}
+          <button className="small" onClick={() => onFault(r.id, "clear")} {...explain(AVAILABILITY_HELP.clear)}>
+            Clear
+          </button>
+        </div>
       )}
       <div className="fault-row">
         {sim.online ? (
-          <button className="small danger" onClick={() => onFault(r.id, "offline")}>
+          <button className="small danger" onClick={() => onFault(r.id, "offline")} {...explain(AVAILABILITY_HELP.offline)}>
             Take offline
           </button>
         ) : (
-          <button className="small" onClick={() => onFault(r.id, "online")}>
+          <button className="small" onClick={() => onFault(r.id, "online")} {...explain(AVAILABILITY_HELP.online)}>
             Bring online
           </button>
         )}
         {r.availability === "unresponsive" && sim.online && (
-          <button className="small" onClick={() => onFault(r.id, "online")}>
+          <button className="small" onClick={() => onFault(r.id, "online")} {...explain(AVAILABILITY_HELP.healthy)}>
             Mark healthy
           </button>
         )}
         {FAULTS.map((f) => (
-          <button key={f.fault} className="small" title={f.title} onClick={() => onFault(r.id, f.fault)}>
+          <button
+            key={f.fault}
+            className={`small ${sim.pending_faults.includes(f.fault) ? "armed-button" : ""}`}
+            aria-pressed={sim.pending_faults.includes(f.fault)}
+            onClick={() => onFault(r.id, f.fault)}
+            {...explain(f.help)}
+          >
             {f.text}
           </button>
         ))}
       </div>
+      {help && <div className="fault-help">{help}</div>}
     </div>
   );
 }
