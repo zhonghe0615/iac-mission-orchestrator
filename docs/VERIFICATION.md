@@ -28,7 +28,7 @@ Test names refer to `backend/tests/`. "Browser run" means headless Chrome drivin
 | Web UI: submit, review plan, robot availability, status, live timeline, approve/reject, inject failure | Verified | Browser run covers each; live updates over server-sent events; state survives a page reload |
 | Backend: reusable mission/task model, capability routing, explicit state machine, simulated adapter | Verified | `engine.py` transition table (DESIGN.md §2); `test_new_robot_type_needs_only_configuration` |
 | Real LLM decision support with structured output and validation; mock is not the only mode | Verified | Real runs below; `test_planner.py` (bounded correction, no fixture fallback) |
-| Tests: success, approval denial, failure and recovery | Verified | 65 tests, passing on Python 3.10 and 3.12 |
+| Tests: success, approval denial, failure and recovery | Verified | 67 tests, passing on Python 3.10 and 3.12 |
 | At least one unhandled edge case documented | Verified | DESIGN.md §8 (concurrent missions on one asset, among others) |
 | Agent cannot bypass execution rules or issue low-level commands | Verified | The plan schema has no robot or approval fields (`test_invalid_plans_are_rejected`); repair is gated at runtime by approval bound to plan version and action |
 
@@ -58,7 +58,7 @@ Test names refer to `backend/tests/`. "Browser run" means headless Chrome drivin
 | Typed fleet; scales without code changes | `test_fleet.py`: 520 robots with 40 missions; 20 types with 1,000 robots; a new type through config only |
 | Idempotent operator commands and robot commands | `test_idempotency.py` |
 | Thread-safe store; one server process per database | `test_concurrency.py` |
-| Silent robot failures detected by a heartbeat lease (busy and idle robots, recovery, no false alarms) | `test_liveness.py`; browser run at real speed: detected 2.6 s after a silent loss, work moved to Scout B; zero false losses with 1,000 robots and 40 missions |
+| Silent robot failures detected by a heartbeat lease (busy and idle robots, recovery, no false alarms); shown as unreachable, distinct from an announced offline; lease configurable | `test_liveness.py`; browser runs at real speed: silent loss detected after 2.6–3.1 s and work moved to Scout B, with an announced offline shown separately; zero false losses with 1,000 robots and 40 missions |
 | Tests detect regressions | Each key guard was removed in turn and its tests failed (approval gate, stale-result check, freed-robot recheck, store lock, snapshot reads, idempotency claim, command dedupe, exclusive database lock, loop check) |
 
 ## Real model runs
@@ -69,5 +69,13 @@ Model `gpt-6-luna` (OpenAI Chat Completions), reasoning effort `medium`.
 | --- | --- | --- | --- |
 | Engine run | 4 tasks: thermal and visual inspection in parallel, conditional `seal_weld_seam` repair, verification | Valid on the first attempt; 17.3 s; 1,920 tokens (395 reasoning) | Resolved |
 | Browser run | 3 tasks: thermal inspection, conditional repair, verification | Valid on the first attempt; 10.0 s; 1,753 tokens | Resolved, with Scout A taken offline mid-inspection and work moved to Scout B |
+
+Operator runs in the UI, read back from the mission records:
+
+| Work order | Plan | Followed the constraints? |
+| --- | --- | --- |
+| "Do a thermal survey of tank T-102 for the quarterly report. Do not perform any repairs." | One thermal inspection, no repair | Yes: thermal as requested, no repair |
+| "The flange gasket on T-102 may be leaking. Inspect it and, if confirmed, replace the gasket." | Visual inspection, then repair with `replace_gasket` conditioned on `defect_detected`, then verification | Yes: correct procedure, repair only if confirmed |
+| "…run the thermal scan and the close-range visual inspection in parallel…" | Thermal and visual with no dependency between them; repair depends on both | Yes: ran on Scouts A and B at the same time |
 
 The model chose different but valid plans across runs. Invalid model output was never observed live. Its handling (correction feedback, visible failure, no fallback) is verified only against a fake endpoint.

@@ -67,8 +67,14 @@ async def test_no_replacement_waits_with_reason_then_resumes(h):
     await h.sim.set_online("scout-a", False)
 
     await h.wait_status(mid, "waiting_resource")
+    # Under load the 30 ms test lease can expire before the announced offline event is
+    # processed, briefly showing "unreachable"; wait for the settled reason.
+    await h.wait(
+        lambda: "Scout A is offline" in h.task(mid, "t1")["status_reason"]
+        and "Scout B is offline" in h.task(mid, "t1")["status_reason"],
+        what="both scouts reported offline",
+    )
     reason = h.task(mid, "t1")["status_reason"]
-    assert "Scout A is offline" in reason and "Scout B is offline" in reason
     assert "Mobile manipulator type lacks thermal_inspection" in reason
     assert h.mission(mid)["status"] not in ("resolved", "no_action_needed")
 

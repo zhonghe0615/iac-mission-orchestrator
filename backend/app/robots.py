@@ -11,7 +11,9 @@ from typing import Awaitable, Callable, Protocol
 
 # Liveness: the integration layer reports which robots are alive at this interval,
 # in one batch, the way a fleet manager would. A robot missing for the lease is
-# treated as offline even if no status event ever arrives.
+# treated as unreachable even if no status event ever arrives. The lease is
+# configurable (HEARTBEAT_LEASE_S); 3 s suits the demo, while industrial Wi-Fi
+# usually needs 5-10 s to avoid false alarms.
 HEARTBEAT_INTERVAL_S = 1.0
 HEARTBEAT_LEASE_S = 3.0
 

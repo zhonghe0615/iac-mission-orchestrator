@@ -17,6 +17,10 @@ def heartbeat_losses(h) -> list[dict]:
     return [e for e in h.store.events(kinds=("robot_status",)) if "no heartbeat" in e["message"]]
 
 
+def availability(h, robot_id: str) -> str:
+    return next(r["availability"] for r in h.engine.robots_view() if r["id"] == robot_id)
+
+
 async def test_silent_loss_mid_inspection_is_detected_by_the_lease(h):
     mid = await h.started_mission()
     await h.wait(lambda: h.task(mid, "t1")["status"] == "running", what="t1 running")
@@ -30,6 +34,8 @@ async def test_silent_loss_mid_inspection_is_detected_by_the_lease(h):
     assert first["ended_at"] - first["started_at"] < THERMAL_TIMEOUT
     assert (second["robot_id"], second["status"]) == ("scout-b", "succeeded")
     assert h.store.robot("scout-a")["health_reason"] == f"no heartbeat for {HEARTBEAT_LEASE_S:g}s"
+    # A lease expiry is reported as unreachable, not offline: the robot may still be acting.
+    assert availability(h, "scout-a") == "unreachable"
 
 
 async def test_command_sent_to_a_silently_lost_robot_is_recovered(h):
@@ -56,7 +62,34 @@ async def test_idle_robot_silently_lost_then_heartbeats_resume(h):
     robot = h.sim.robots["scout-b"]
     robot.online, robot.silent = True, False
     await h.wait(lambda: h.store.robot("scout-b")["online"], timeout=1, what="scout-b back online")
-    assert any("heartbeats resumed" in e["message"] for e in h.store.events(kinds=("robot_status",)))
+    assert any("reachable again (heartbeats resumed)" in e["message"] for e in h.store.events(kinds=("robot_status",)))
+    assert availability(h, "scout-b") == "available"
+
+
+async def test_announced_offline_is_offline_not_unreachable(h):
+    await h.sim.set_online("scout-a", False)
+    await h.wait(lambda: availability(h, "scout-a") == "offline", what="scout-a offline")
+    assert h.store.robot("scout-a")["health_reason"] == ""
+
+
+async def test_lease_is_configurable(tmp_path, monkeypatch):
+    from app.config import load_settings
+
+    monkeypatch.setenv("HEARTBEAT_LEASE_S", "7.5")
+    assert load_settings().heartbeat_lease_s == 7.5
+    monkeypatch.setenv("HEARTBEAT_LEASE_S", "1")
+    with pytest.raises(ValueError, match="at least 2s"):
+        load_settings()
+
+    from .conftest import close_harness, make_harness
+
+    h = await make_harness(lease_s=7.5)
+    try:
+        h.sim.lose_silently("scout-a")
+        await h.wait(lambda: not h.store.robot("scout-a")["online"], timeout=2, what="scout-a unreachable")
+        assert h.store.robot("scout-a")["health_reason"] == "no heartbeat for 7.5s"
+    finally:
+        await close_harness(h)
 
 
 async def test_healthy_fleet_has_no_false_heartbeat_alarms(h):

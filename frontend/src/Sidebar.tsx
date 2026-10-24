@@ -167,7 +167,7 @@ const FAULT_TEXT = new Map(FAULTS.map((f) => [f.fault, f.text]));
 const AVAILABILITY_HELP: Record<string, string> = {
   offline: "Takes the robot offline now and announces it. Work in progress is lost: an inspection is retried elsewhere; a repair pauses for you because its outcome is unknown.",
   silent:
-    "Cuts the robot off without telling anyone: no status message, heartbeats stop, commands vanish. Expect: it still looks available for about 3 s, then the heartbeat lease marks it offline and work moves elsewhere.",
+    "Cuts the robot off without telling anyone: no status message, heartbeats stop, commands vanish. Expect: it still looks available for about 3 s, then the heartbeat lease marks it unreachable (it may still be acting) and work moves elsewhere.",
   online: "Brings the robot back online now. Missions waiting for a robot continue automatically.",
   healthy: "Clears the unresponsive mark after a timeout, asserting the robot is usable again.",
   clear: "Disarms faults that have not been used yet.",
@@ -327,7 +327,7 @@ function RobotRow({
         </div>
       )}
       {r.health_reason && <div className="hint warn-text">{r.health_reason}</div>}
-      {sim.silent && r.availability !== "offline" && (
+      {sim.silent && r.availability !== "unreachable" && (
         <div className="hint warn-text">Silently disconnected; the orchestrator has not been told yet.</div>
       )}
       {sim.pending_faults.length > 0 && (

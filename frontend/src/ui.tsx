@@ -26,6 +26,7 @@ const TONE: Record<string, string> = {
   available: "ok",
   busy: "info",
   offline: "danger",
+  unreachable: "danger",
   unresponsive: "danger",
 };
 

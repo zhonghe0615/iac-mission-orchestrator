@@ -127,7 +127,7 @@ export interface Robot {
   type: string;
   type_name: string;
   capabilities: string[];
-  availability: "available" | "busy" | "offline" | "unresponsive";
+  availability: "available" | "busy" | "offline" | "unreachable" | "unresponsive";
   health_reason: string;
   reservation: { attempt_id: string; mission_id: string; task_id: string } | null;
 }

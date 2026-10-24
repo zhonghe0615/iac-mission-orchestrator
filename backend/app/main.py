@@ -84,7 +84,12 @@ def create_app(settings: Settings | None = None, planners: dict[str, Planner] | 
         store = Store(settings.database_path)
         sim = SimulatedFleet(fleet, time_scale=settings.sim_time_scale)
         engine = Engine(
-            store, sim, fleet, planners or build_planners(settings, fleet), time_scale=settings.sim_time_scale
+            store,
+            sim,
+            fleet,
+            planners or build_planners(settings, fleet),
+            time_scale=settings.sim_time_scale,
+            heartbeat_lease_s=settings.heartbeat_lease_s,
         )
         sim.attach(engine.enqueue, heartbeat=engine.heartbeat)
         await engine.start()

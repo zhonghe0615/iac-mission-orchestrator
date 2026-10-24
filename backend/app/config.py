@@ -4,6 +4,8 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+from .robots import HEARTBEAT_INTERVAL_S, HEARTBEAT_LEASE_S
+
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 
 
@@ -29,6 +31,7 @@ class Settings:
     llm_model: str
     llm_reasoning_effort: str
     llm_timeout_s: float
+    heartbeat_lease_s: float = HEARTBEAT_LEASE_S
 
     @property
     def llm_configured(self) -> bool:
@@ -53,4 +56,14 @@ def load_settings() -> Settings:
         llm_model=env.get("LLM_MODEL", ""),
         llm_reasoning_effort=env.get("LLM_REASONING_EFFORT", ""),
         llm_timeout_s=float(env.get("LLM_TIMEOUT_S", "120")),
+        heartbeat_lease_s=_lease(env.get("HEARTBEAT_LEASE_S", str(HEARTBEAT_LEASE_S))),
     )
+
+
+def _lease(value: str) -> float:
+    lease = float(value)
+    if lease < 2 * HEARTBEAT_INTERVAL_S:
+        raise ValueError(
+            f"HEARTBEAT_LEASE_S must be at least {2 * HEARTBEAT_INTERVAL_S:g}s (two heartbeat intervals); got {lease:g}"
+        )
+    return lease

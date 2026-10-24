@@ -393,7 +393,8 @@ class Store:
         """Counts of unavailable robots per type and reason, in one grouped query."""
         marks = ", ".join("?" for _ in robot_types)
         return self._all(
-            "SELECT type, CASE WHEN online = 0 THEN 'offline' WHEN health != 'ok' THEN health ELSE 'busy' END AS why,"
+            "SELECT type, CASE WHEN online = 0 AND health = 'unreachable' THEN 'unreachable'"
+            " WHEN online = 0 THEN 'offline' WHEN health != 'ok' THEN health ELSE 'busy' END AS why,"
             f" COUNT(*) AS n FROM robots WHERE type IN ({marks})"
             " AND (online = 0 OR health != 'ok' OR reserved_attempt IS NOT NULL) GROUP BY type, why",
             *robot_types,

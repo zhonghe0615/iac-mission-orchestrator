@@ -68,10 +68,17 @@ class _Outbox:
 
 class Engine:
     def __init__(
-        self, store: Store, port: RobotPort, fleet: Fleet, planners: dict[str, Planner], time_scale: float = 1.0
+        self,
+        store: Store,
+        port: RobotPort,
+        fleet: Fleet,
+        planners: dict[str, Planner],
+        time_scale: float = 1.0,
+        heartbeat_lease_s: float = HEARTBEAT_LEASE_S,
     ):
         self.store = store
         self.fleet = fleet
+        self.heartbeat_lease_s = heartbeat_lease_s
         self.port = port
         self.planners = planners
         self.time_scale = time_scale
@@ -170,7 +177,7 @@ class Engine:
 
     async def _watch_heartbeats(self) -> None:
         interval = HEARTBEAT_INTERVAL_S * self.time_scale
-        lease = HEARTBEAT_LEASE_S * self.time_scale
+        lease = self.heartbeat_lease_s * self.time_scale
         last_check = time.monotonic()
         while True:
             await asyncio.sleep(interval)
@@ -189,7 +196,7 @@ class Engine:
         rows = self.store.robot_map()
         for rid in robot_ids:
             if rows[rid]["online"]:  # already offline if it announced it
-                self._on_robot_status(rid, False, reason=f"no heartbeat for {HEARTBEAT_LEASE_S:g}s")
+                self._on_robot_status(rid, False, reason=f"no heartbeat for {self.heartbeat_lease_s:g}s")
 
     def _on_heartbeat_resumed(self, robot_id: str) -> None:
         if not self.store.robot(robot_id)["online"]:
@@ -467,15 +474,25 @@ class Engine:
             self._attempt_failed(attempt, "failed", ev.payload.get("error", "action failed"), outcome_known=True)
 
     def _on_robot_status(self, robot_id: str, online: bool, reason: str | None = None) -> None:
-        """Announced status events and heartbeat-lease expiry both arrive here."""
+        """Announced status events and heartbeat-lease expiry both arrive here.
+
+        A lease expiry (reason given) means "unreachable": the robot stopped reporting and may
+        still be acting. Only an announced change is reported as offline.
+        """
         name = self.fleet.name(robot_id)
         why = f" ({reason})" if reason else ""
         if online:
+            was_unreachable = self.store.robot(robot_id)["health"] == "unreachable"
             self.store.update_robot(robot_id, online=1, health="ok", health_reason="")
-            self._event(None, "robot_status", f"{name} is back online{why}", robot_id=robot_id, online=True)
+            state = "is reachable again" if was_unreachable else "is back online"
+            self._event(None, "robot_status", f"{name} {state}{why}", robot_id=robot_id, online=True)
+        elif reason:
+            self.store.update_robot(robot_id, online=0, health="unreachable", health_reason=reason)
+            self._event(None, "robot_status", f"{name} is unreachable{why}", robot_id=robot_id, online=False)
         else:
-            self.store.update_robot(robot_id, online=0, health_reason=reason or "")
-            self._event(None, "robot_status", f"{name} went offline{why}", robot_id=robot_id, online=False)
+            self.store.update_robot(robot_id, online=0, health="ok", health_reason="")
+            self._event(None, "robot_status", f"{name} went offline", robot_id=robot_id, online=False)
+        if not online:
             lost = f"{name} stopped sending heartbeats during the action" if reason else f"{name} went offline during the action"
             for attempt in self.store.open_attempts():
                 if attempt["robot_id"] != robot_id:
@@ -743,7 +760,9 @@ class Engine:
             rows = self.store.robot_map()
             for r in capable:
                 row = rows[r.id]
-                if not row["online"]:
+                if not row["online"] and row["health"] == "unreachable":
+                    reasons.append(f"{r.name} is unreachable ({row['health_reason']})")
+                elif not row["online"]:
                     reasons.append(f"{r.name} is offline")
                 elif row["health"] != "ok":
                     reasons.append(f"{r.name} is {row['health']} ({row['health_reason']})")
@@ -1002,7 +1021,7 @@ class Engine:
             row = rows[spec.id]
             reservation = self.store.attempt(row["reserved_attempt"]) if row["reserved_attempt"] else None
             if not row["online"]:
-                availability = "offline"
+                availability = "unreachable" if row["health"] == "unreachable" else "offline"
             elif row["health"] != "ok":
                 availability = row["health"]
             elif reservation:

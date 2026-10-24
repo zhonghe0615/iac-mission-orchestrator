@@ -63,12 +63,17 @@ class Harness:
 
 
 async def make_harness(
-    db_path: str = ":memory:", planners: dict | None = None, fleet: Fleet | None = None, time_scale: float = TIME_SCALE
+    db_path: str = ":memory:",
+    planners: dict | None = None,
+    fleet: Fleet | None = None,
+    time_scale: float = TIME_SCALE,
+    lease_s: float | None = None,
 ) -> Harness:
     fleet = fleet or Fleet.load()
     store = Store(db_path)
     sim = SimulatedFleet(fleet, time_scale=time_scale)
-    engine = Engine(store, sim, fleet, planners or {"fixture": FixturePlanner(fleet)}, time_scale=time_scale)
+    extra = {} if lease_s is None else {"heartbeat_lease_s": lease_s}
+    engine = Engine(store, sim, fleet, planners or {"fixture": FixturePlanner(fleet)}, time_scale=time_scale, **extra)
     sim.attach(engine.enqueue, heartbeat=engine.heartbeat)
     await engine.start()
     sim.start()
