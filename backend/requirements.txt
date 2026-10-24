@@ -38,6 +38,8 @@ pydantic==2.14.1
     #   mission-orchestrator
 pydantic-core==2.50.1
     # via pydantic
+socksio==1.0.0
+    # via httpx
 starlette==1.7.0 ; python_full_version < '3.11'
     # via fastapi
 starlette==1.9.0 ; python_full_version >= '3.11'

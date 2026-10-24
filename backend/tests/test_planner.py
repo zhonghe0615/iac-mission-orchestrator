@@ -93,6 +93,23 @@ async def test_failed_llm_planning_never_substitutes_the_fixture():
         await close_harness(h)
 
 
+async def test_unexpected_planner_error_fails_planning_visibly():
+    class BrokenPlanner:
+        mode = "llm"
+        label = "broken planner"
+
+        async def plan(self, work_order: str):
+            raise ImportError("socks support missing")
+
+    h = await make_harness(planners={"llm": BrokenPlanner()})
+    try:
+        mid = await h.engine.create_mission("Inspect and resolve T-101", "llm", "tester")
+        assert h.mission(mid)["status"] == "planning_failed"
+        assert "socks support missing" in h.mission(mid)["status_reason"]
+    finally:
+        await close_harness(h)
+
+
 async def test_llm_plan_runs_through_the_same_execution_path():
     h = await make_harness(planners={"llm": planner([json.dumps(FIXTURE_PLAN)], [])})
     try:

@@ -31,7 +31,7 @@ from typing import Any, Callable
 
 from .catalog import ACTIONS, ASSETS, Fleet
 from .plan import Plan, validate_plan
-from .planner import Planner
+from .planner import Planner, PlanningOutcome
 from .robots import Command, DispatchError, RobotEvent, RobotPort
 from .store import Store, new_id
 
@@ -188,7 +188,16 @@ class Engine:
             self._event(mission_id, "planning_started", f"Planning with {planner.label}", planner_mode=planner_mode)
 
         await self._locked(create)
-        outcome = await planner.plan(work_order)
+        try:
+            outcome = await planner.plan(work_order)
+        except Exception as exc:
+            # A planner bug must not leave the mission stuck in "planning".
+            log.exception("planner %s failed", planner_mode)
+            outcome = PlanningOutcome(
+                plan=None,
+                error=f"planner error: {exc}",
+                calls=[{"summary": f"Planner raised {type(exc).__name__}: {exc}", "outcome": "error"}],
+            )
 
         def finish() -> None:
             for call in outcome.calls:

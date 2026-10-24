@@ -186,7 +186,13 @@ class LLMPlanner:
         ]
         calls: list[dict] = []
         errors: list[str] = []
-        async with httpx.AsyncClient(timeout=self.timeout_s, transport=self.transport) as client:
+        try:
+            client = httpx.AsyncClient(timeout=self.timeout_s, transport=self.transport)
+        except Exception as exc:  # e.g. an unusable proxy configuration
+            calls.append({"attempt": 1, "model": self.model, "outcome": "error", "error": str(exc),
+                          "summary": f"Could not create the HTTP client: {exc}"})
+            return PlanningOutcome(plan=None, error=f"could not reach the model: {exc}", calls=calls)
+        async with client:
             for attempt in range(1, self.max_corrections + 2):
                 started = time.monotonic()
                 record = {"attempt": attempt, "model": self.model, "reasoning_effort": self.reasoning_effort}
