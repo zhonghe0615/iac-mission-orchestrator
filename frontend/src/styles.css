@@ -725,11 +725,16 @@ button.armed-button {
   margin-top: 3px;
 }
 
-.suggestion {
+.suggestions {
   display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
 }
 
 button.chip {
@@ -739,13 +744,9 @@ button.chip {
   background: var(--info-bg);
   border-color: var(--info-bg);
   color: var(--info);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  min-width: 0;
 }
 
-.suggestion-count {
-  margin-left: auto;
-  font-size: 11px;
+button.chip-active {
+  border-color: var(--info);
+  font-weight: 600;
 }

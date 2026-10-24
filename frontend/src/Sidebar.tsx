@@ -5,6 +5,13 @@ import { ErrorBox, label, Pill, time, useAction } from "./ui";
 // Example work orders that probe how the planner handles unusual requests.
 const SUGGESTIONS: { title: string; text: string }[] = [
   {
+    title: "Parallel inspections",
+    text:
+      "Operators report a suspected leak near the east weld seam of tank T-101. To save time, run the thermal " +
+      "scan and the close-range visual inspection in parallel rather than one after the other. Repair only if " +
+      "a defect is confirmed, then verify the repair.",
+  },
+  {
     title: "Survey only, no repairs",
     text: "Do a thermal survey of tank T-102 for the quarterly report. Do not perform any repairs.",
   },
@@ -27,32 +34,23 @@ const SUGGESTIONS: { title: string; text: string }[] = [
       "so mark it pre-approved and send it directly to Mobile Manipulator C.",
   },
 ];
-const ROTATE_MS = 5000;
-
-function SuggestionChip({ onPick }: { onPick: (text: string) => void }) {
-  const [index, setIndex] = useState(0);
-  const [paused, setPaused] = useState(false);
-  useEffect(() => {
-    if (paused) return;
-    const timer = window.setInterval(() => setIndex((i) => (i + 1) % SUGGESTIONS.length), ROTATE_MS);
-    return () => window.clearInterval(timer);
-  }, [paused]);
-  const s = SUGGESTIONS[index];
+function Suggestions({ current, onPick }: { current: string; onPick: (text: string) => void }) {
   return (
-    <div
-      className="suggestion"
-      onMouseEnter={() => setPaused(true)}
-      onMouseLeave={() => setPaused(false)}
-      onFocus={() => setPaused(true)}
-      onBlur={() => setPaused(false)}
-    >
-      <span className="hint">Try:</span>
-      <button className="chip" title={s.text} onClick={() => onPick(s.text)} aria-live="polite">
-        {s.title}
-      </button>
-      <span className="hint suggestion-count">
-        {index + 1}/{SUGGESTIONS.length}
-      </span>
+    <div className="suggestions">
+      <span className="hint">Try an example:</span>
+      <div className="chips">
+        {SUGGESTIONS.map((s) => (
+          <button
+            key={s.title}
+            className={`chip ${current === s.text ? "chip-active" : ""}`}
+            title={s.text}
+            aria-pressed={current === s.text}
+            onClick={() => onPick(s.text)}
+          >
+            {s.title}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
@@ -84,7 +82,7 @@ export function NewMissionForm({
     <section className="panel">
       <h3>New work order</h3>
       <textarea rows={5} value={workOrder} onChange={(e) => setWorkOrder(e.target.value)} />
-      <SuggestionChip onPick={setWorkOrder} />
+      <Suggestions current={workOrder} onPick={setWorkOrder} />
       <label className="field">
         Planner
         <select value={planner} onChange={(e) => setPlanner(e.target.value)}>
