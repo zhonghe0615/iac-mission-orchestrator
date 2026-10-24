@@ -61,9 +61,24 @@ Define concrete action schemas, durations, observations, and failure behavior. T
 - A 3-5 minute demo video **or** live walkthrough covering planning, execution, approval, failure, and recovery. A repeatable walkthrough and script are the proposed default; a recorded video has not been explicitly selected.
 - Brief AI-tool usage disclosure describing what tools accelerated and which choices received human engineering judgment. Record actual use; do not invent a history of human decisions.
 
-The design must also address system contracts, production reliability and governance, build-versus-buy decisions, first 30/60/90-day priorities, and collaboration with integration engineers, field teams, customers, and sales/solutions teams.
+### Required design document topics
 
-Durable restart/replay, concurrent resource contention, out-of-order events, and metrics are assessment bonuses. Basic repair authorization is mandatory even though additional policy sophistication is optional.
+The PDF poses these sections, each with a key question the design should answer directly:
+
+1. **System design.** Components, data flow, and responsibilities for turning a work order into execution across a mixed fleet. Cover agentic planning (how the LLM uses site context, capabilities, and tools; how output is validated), workflow execution (dependencies, retries, timeouts, cancellation, persistence, resumption), fleet coordination (assignment, shared-resource reservation, availability, conflicting commands), human-in-the-loop (approvals, overrides, escalations, audit), and platform boundaries (orchestration versus Robot Integration Layer, OEM fleet managers, robot-local control). Key question: where should AI reasoning end and deterministic, policy-governed execution begin? Also explain the Temporal/LangGraph/workflow-library/custom tradeoff.
+2. **Fit into the bigger picture.** Contracts between enterprise inputs, agent/planning services, orchestration, governance, the Robot Integration Layer, and operator interfaces. What is shared across robot types and what stays robot/OEM-specific. Key question: how does the orchestration core stay generic as robot brands, customer sites, and mission types are added?
+3. **Reliability, safety, and agent governance.** Path to production: mission durability, idempotent command handling, timeouts, stale or duplicate events, partial completion, human intervention, auditability, access control, and invalid or unsafe LLM plans. Key question: how does a mission remain understandable and recoverable when robots, networks, external systems, or the agent fail?
+4. **Build versus buy.** Under tight resources, what to build and what to source: workflow engines, agent frameworks, OEM fleet managers, robot-ops platforms, customer facility systems. Evaluate cost, integration effort, reliability, control, and lock-in. Key question: what gives IAC durable differentiation, and what commodity infrastructure should it avoid rebuilding?
+5. **First 90 days.** Scenario: owning the first production-ready Orchestration Layer for four quadrupeds and five mobile manipulators with varied capabilities; missions include gas detection, visual/thermal inspection, material handling, and welding; operators need approvals, exception handling, and audit logs. Give priorities for days 1-30, 31-60, and 61-90, covering: the one or two workflows to ship first and what to defer; the minimum shared mission, task, capability, resource, and event model; testing via simulation, staged real-world rollout, and operator feedback; dependencies on integration engineers, field teams, customers, and vendors; and success metrics (for example mission success rate, time to recover, operator interventions, task reuse, onboarding time for new robot types or mission templates). Key question: what is the smallest useful orchestration product that proves reliable, repeatable workflows across heterogeneous robots?
+6. **Team and customer execution.** First roles or contractors to add, collaboration with sales/solutions teams, and turning customer-specific mission requests into reusable platform primitives rather than one-off implementations.
+
+### Evaluation criteria
+
+The assessment values working software and engineering judgment over extensive prose or sophisticated visuals. Its stated primary signals, in order: (1) end-to-end ownership and ability to ship, (2) agent design with clear safety/validation boundaries, (3) robust state and failure handling, (4) reusable platform abstractions, and (5) product/UI clarity. Reviewers will discuss tradeoffs and what would change for real deployments.
+
+### Bonuses
+
+The assessment lists these as optional: durable restart/replay, concurrent missions with resource contention, explicit policy checks, simulated out-of-order events, and metrics for mission completion and recovery. Basic repair authorization is mandatory even though additional policy sophistication is optional. Section 6 sets which bonuses to pursue and in what order.
 
 ## 4. Proposed implementation architecture
 
@@ -152,6 +167,18 @@ For a repair with an unknown result, query status or pause for intervention. Do 
 
 ## 6. Implementation milestones and checks
 
+### Priority tiers
+
+- **Tier 1, required slice:** milestones A through F as checked below. Every Tier 1 check must pass before Tier 2 work starts. The assessment rewards a convincing end-to-end slice over breadth.
+- **Tier 2, selected bonuses, in this order:**
+  1. Explicit policy checks: show each policy decision (allowed or blocked, with its reason) in the timeline and audit record. This mostly surfaces the repair gate that Tier 1 already requires.
+  2. Duplicate and out-of-order events: add a simulator control that redelivers or reorders events, and show that they are ignored safely. This builds on the correlation IDs and deduplication identity that Tier 1 already requires.
+  3. Durable restart: restart the backend while a mission waits for approval and recover it from SQLite. Running actions with an ambiguous outcome need reconciliation, not redispatch.
+  4. Metrics: mission completion, retries, reassignments, time to recover, and operator interventions, derived from the audit events.
+- **Deferred:** concurrent missions with resource contention, automatic replanning, and implementing unknown-outcome repair reconciliation. Describe them in the design document instead.
+
+Stop Tier 2 work at a clean item boundary once the remaining budget is needed for the design document, demo, and README.
+
 ### A. Contracts and executable foundation
 
 Create backend/frontend scaffolding, configuration examples without secrets, domain schemas, and a transition table. Define a minimal fixed site and defect scenario. Document assumptions such as target identifiers, inspection findings, and denial outcome.
@@ -166,9 +193,9 @@ Check: success and denial execute through the backend; direct API requests canno
 
 ### C. Failure and recovery
 
-Implement a reproducible Scout A inspection failure, eligible reassignment to B, and explicit waiting/escalation when no replacement is available. Correlate attempt results. Define restart and unknown-action behavior.
+Implement a reproducible Scout A inspection failure, eligible reassignment to B, and explicit waiting/escalation when no replacement is available. Correlate attempt results. Document restart and unknown-action behavior; implementing them is Tier 2 or deferred.
 
-Check: failure recovery preserves the mission and history; late A events cannot incorrectly finish B's active task; unknown repair outcomes do not trigger duplicate repair.
+Check: failure recovery preserves the mission and history; late A events cannot incorrectly finish B's active task. A repair timeout pauses for operator intervention instead of retrying.
 
 ### D. Real planning integration
 
@@ -190,17 +217,20 @@ Check: success, denial, and failure/recovery can all be reproduced. Mark each re
 
 ## 7. Acceptance scenarios
 
-| Scenario | Observable acceptance criteria |
-| --- | --- |
-| Approved repair | Submit work order; obtain and review a real model plan; run inspection; show evidence; pause for approval; approve; C repairs; verification succeeds; mission completes with timeline |
-| Denied repair | Reject the pending repair; no repair command is dispatched; mission clearly records rejection and unresolved work |
-| Inspection recovery | Inject A failure during inspection; persist failed attempt; choose B if eligible; continue the original mission; retain both attempts |
-| No available replacement | Recovery cannot choose B; show explicit waiting or escalation with a reason; no false completion |
-| Invalid or unsafe plan | Invalid model output or edited plans are blocked before execution; omitting an approval node cannot bypass runtime repair checks |
-| Duplicate or stale result | Repeated event does not repeat transitions; superseded attempt result does not corrupt current state |
-| Restart quality target | Restart backend during approval waiting; recover the mission and decision context. Running ambiguous actions require reconciliation rather than automatic redispatch |
+| Scenario | Tier | Observable acceptance criteria |
+| --- | --- | --- |
+| Approved repair | 1 | Submit work order; obtain and review a real model plan; run inspection; show evidence; pause for approval; approve; C repairs; verification succeeds; mission completes with timeline |
+| Denied repair | 1 | Reject the pending repair; no repair command is dispatched; mission clearly records rejection and unresolved work |
+| Inspection recovery | 1 | Inject A failure during inspection; persist failed attempt; choose B if eligible; continue the original mission; retain both attempts |
+| No available replacement | 1 | Recovery cannot choose B; show explicit waiting or escalation with a reason; no false completion |
+| Invalid or unsafe plan | 1 | Invalid model output or edited plans are blocked before execution; omitting an approval node cannot bypass runtime repair checks |
+| Stale result | 1 | A superseded attempt's late result does not corrupt the current attempt's state |
+| Visible policy decisions | 2 | Each dispatch and repair gate decision appears in the timeline and audit record with its reason |
+| Duplicate or out-of-order event | 2 | Injected redelivered or reordered events do not repeat transitions or move state backward |
+| Restart | 2 | Restart backend during approval waiting; recover the mission and decision context. Running ambiguous actions require reconciliation rather than automatic redispatch |
+| Metrics | 2 | Completion, retry, reassignment, recovery time, and intervention figures match the audit events |
 
-Keep tests focused on behavior and invariants. The first three scenarios are the assessment's basic test categories; remaining cases support the reliability design and proposed quality targets.
+Keep tests focused on behavior and invariants. The first three scenarios are the assessment's basic test categories. Automated tests must run offline against the deterministic planner fixture. The real model requirement in "Approved repair" is a separate integration check, run manually with credentials and recorded as evidence.
 
 ## 8. Scope control and unresolved details
 
