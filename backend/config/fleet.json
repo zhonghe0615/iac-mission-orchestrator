@@ -1,0 +1,17 @@
+{
+  "robot_types": {
+    "inspection_quadruped": {
+      "name": "Inspection quadruped",
+      "capabilities": ["navigation", "camera", "thermal_inspection"]
+    },
+    "mobile_manipulator": {
+      "name": "Mobile manipulator",
+      "capabilities": ["navigation", "camera", "repair"]
+    }
+  },
+  "robots": [
+    {"id": "scout-a", "name": "Scout A", "type": "inspection_quadruped", "preference_rank": 1},
+    {"id": "scout-b", "name": "Scout B", "type": "inspection_quadruped", "preference_rank": 2},
+    {"id": "manipulator-c", "name": "Mobile Manipulator C", "type": "mobile_manipulator", "preference_rank": 3}
+  ]
+}

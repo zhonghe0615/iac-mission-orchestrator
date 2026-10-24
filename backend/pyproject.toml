@@ -1,0 +1,26 @@
+[project]
+name = "mission-orchestrator"
+version = "0.1.0"
+description = "Mission orchestration prototype for a simulated robot fleet"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn>=0.30",
+    "httpx>=0.27",
+    "pydantic>=2.8",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-timeout>=2.4.0",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-p anyio"
+# Fail fast instead of hanging if the engine loops or deadlocks.
+timeout = 30

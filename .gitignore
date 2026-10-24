@@ -16,6 +16,8 @@ htmlcov/
 # Frontend
 node_modules/
 dist/
+# The built operator UI is committed so the app runs with Python only.
+!frontend/dist/
 coverage/
 
 # Runtime data
