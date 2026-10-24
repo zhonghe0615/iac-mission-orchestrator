@@ -122,6 +122,7 @@ frontend/            React + TypeScript console (built output committed in dist/
 docs/
   DESIGN.md          architecture, tradeoffs, production path
   DEMO.md            walkthrough script
+  VERIFICATION.md    status of every requirement, with evidence
   AI_USAGE.md        AI tool usage
   IMPLEMENTATION_HANDOVER.md   planning handover and acceptance criteria
 ```
