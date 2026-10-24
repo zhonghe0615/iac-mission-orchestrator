@@ -69,8 +69,9 @@ async def make_harness(
     store = Store(db_path)
     sim = SimulatedFleet(fleet, time_scale=time_scale)
     engine = Engine(store, sim, fleet, planners or {"fixture": FixturePlanner(fleet)}, time_scale=time_scale)
-    sim.attach(engine.enqueue)
+    sim.attach(engine.enqueue, heartbeat=engine.heartbeat)
     await engine.start()
+    sim.start()
     return Harness(store, sim, engine)
 
 

@@ -48,7 +48,9 @@ class Decision(BaseModel):
 
 
 class Fault(BaseModel):
-    fault: Literal["offline", "online", "fail_next", "hang_next", "duplicate_next", "reorder_next", "clear"]
+    fault: Literal[
+        "offline", "online", "lose_silently", "fail_next", "hang_next", "duplicate_next", "reorder_next", "clear"
+    ]
     actor: str = Actor
 
 
@@ -84,8 +86,9 @@ def create_app(settings: Settings | None = None, planners: dict[str, Planner] | 
         engine = Engine(
             store, sim, fleet, planners or build_planners(settings, fleet), time_scale=settings.sim_time_scale
         )
-        sim.attach(engine.enqueue)
+        sim.attach(engine.enqueue, heartbeat=engine.heartbeat)
         await engine.start()
+        sim.start()
         app.state.store, app.state.sim, app.state.engine = store, sim, engine
         try:
             yield
@@ -257,6 +260,10 @@ def create_app(settings: Settings | None = None, planners: dict[str, Planner] | 
         elif body.fault == "online":
             await sim.set_online(robot_id, True)
             await engine.restore_robot(robot_id, body.actor)
+        elif body.fault == "lose_silently":
+            # Nothing is reported; the engine finds out when the heartbeat lease expires.
+            sim.lose_silently(robot_id)
+            engine._notify()
         elif body.fault == "clear":
             sim.clear_faults(robot_id)
             engine._notify()

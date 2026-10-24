@@ -104,6 +104,15 @@ Every robot belongs to a declared robot type, and the type defines its capabilit
 
 Routing filters by capability (via the robot's type), then availability (online, healthy, unreserved), then preference rank. The reason for passing over robots is recorded and shown: per robot in small fleets, counted per type in large ones (for example "Inspection quadruped: 300 offline"). A reservation is held for the lifetime of an attempt. With no eligible robot, the task waits with an explicit reason and resumes when a robot becomes available. Every dispatch passes an explicit policy check (capability, availability, known target, approval) whose result is written to the timeline.
 
+### Robot liveness
+
+The engine learns about availability in two ways, and both lead to the same offline handling (open attempts become `lost`, retry-safe work is rerouted, a repair pauses for the operator):
+
+- **Announced changes.** A robot or fleet manager reports going offline or online with a status event. The engine reacts within milliseconds: events are pushed, not polled.
+- **Heartbeat lease.** The integration layer reports every live robot in one batch each second. Last-seen times are kept in memory, because heartbeats are too frequent to write to the database. A monitor marks a robot offline after 3 s without one ("no heartbeat for 3s") and back online when heartbeats resume. This catches silent failures, such as power or network loss, that never produce an event, whether the robot was busy or idle. Without it, a busy robot would be noticed only at its command timeout (10–15 s), and an idle one only when a dispatch to it failed.
+
+To avoid false alarms, the monitor restarts its clock if its own loop was stalled longer than the lease, since heartbeats would have been delayed too. No false losses occurred in the 520- and 1,000-robot runs.
+
 ### Scaling the fleet
 
 Capability-based routing means plans, the engine, and the UI never name a robot. Two kinds of growth are supported without code changes:
@@ -143,6 +152,7 @@ The ceiling is the single process with one lock and SQLite: every event is handl
 - **Idempotent commands:** command IDs already identify attempts, and the simulated robot already deduplicates by them. A real integration layer must do the same, durably, so a resend cannot repeat a physical action. Idempotency keys should expire after a retention period; the prototype keeps them forever.
 - **Unknown outcomes:** add a status query or reconciliation step before escalating; keep the rule that a non-repeatable action is never retried blindly.
 - **Stale or duplicate events:** keep the inbox and attempt-state checks; add per-robot sequence numbers to detect gaps.
+- **Liveness:** tune the heartbeat lease per robot type and network; subscribe to OEM fleet-manager status where available; after a lease expiry, query the robot's actual state when it returns before trusting it with new work.
 - **Partial completion and intervention:** today an operator can retry or cancel. Production needs explicit "mark done manually" and "replan from here" actions, both audited.
 - **Access control:** the prototype has no authentication; the actor name is self-reported. Production needs SSO identities, role-based permissions (approver vs. operator vs. viewer), approval scoped by site and action risk, and possibly two-person approval for some actions.
 - **Invalid or unsafe LLM plans:** already blocked by validation, with bounded correction and visible failure. Add red-team test suites for prompts, evaluation of plan quality over time, and policy rules that are versioned and reviewed like code.

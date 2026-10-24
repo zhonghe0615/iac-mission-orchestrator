@@ -165,7 +165,9 @@ const FAULTS: { fault: string; text: string; help: string }[] = [
 ];
 const FAULT_TEXT = new Map(FAULTS.map((f) => [f.fault, f.text]));
 const AVAILABILITY_HELP: Record<string, string> = {
-  offline: "Takes the robot offline now. Work in progress is lost: an inspection is retried elsewhere; a repair pauses for you because its outcome is unknown.",
+  offline: "Takes the robot offline now and announces it. Work in progress is lost: an inspection is retried elsewhere; a repair pauses for you because its outcome is unknown.",
+  silent:
+    "Cuts the robot off without telling anyone: no status message, heartbeats stop, commands vanish. Expect: it still looks available for about 3 s, then the heartbeat lease marks it offline and work moves elsewhere.",
   online: "Brings the robot back online now. Missions waiting for a robot continue automatically.",
   healthy: "Clears the unresponsive mark after a timeout, asserting the robot is usable again.",
   clear: "Disarms faults that have not been used yet.",
@@ -325,6 +327,9 @@ function RobotRow({
         </div>
       )}
       {r.health_reason && <div className="hint warn-text">{r.health_reason}</div>}
+      {sim.silent && r.availability !== "offline" && (
+        <div className="hint warn-text">Silently disconnected; the orchestrator has not been told yet.</div>
+      )}
       {sim.pending_faults.length > 0 && (
         <div className="hint warn-text armed">
           Armed for next commands:{" "}
@@ -337,9 +342,14 @@ function RobotRow({
       <div className="fault-title">Inject failure</div>
       <div className="fault-row" role="group" aria-label={`Inject failure on ${r.name}`}>
         {sim.online ? (
-          <button className="small danger" onClick={() => onFault(r.id, "offline")} {...explain(AVAILABILITY_HELP.offline)}>
-            Take offline
-          </button>
+          <>
+            <button className="small danger" onClick={() => onFault(r.id, "offline")} {...explain(AVAILABILITY_HELP.offline)}>
+              Take offline
+            </button>
+            <button className="small danger" onClick={() => onFault(r.id, "lose_silently")} {...explain(AVAILABILITY_HELP.silent)}>
+              Lose silently
+            </button>
+          </>
         ) : (
           <button className="small" onClick={() => onFault(r.id, "online")} {...explain(AVAILABILITY_HELP.online)}>
             Bring online

@@ -144,7 +144,7 @@ export interface RobotsResponse {
   types: RobotType[];
   robots: Robot[];
   simulator: {
-    robots: Record<string, { online: boolean; pending_faults: string[]; active_commands: string[] }>;
+    robots: Record<string, { online: boolean; silent: boolean; pending_faults: string[]; active_commands: string[] }>;
     assets: Record<string, { defect_present: boolean; repaired: boolean }>;
   };
 }

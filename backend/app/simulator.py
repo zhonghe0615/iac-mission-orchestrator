@@ -10,7 +10,7 @@ import uuid
 from dataclasses import dataclass, field
 
 from .catalog import ACTIONS, ASSETS, Fleet
-from .robots import Command, DispatchError, EventSink, RobotEvent
+from .robots import HEARTBEAT_INTERVAL_S, Command, DispatchError, EventSink, HeartbeatSink, RobotEvent
 
 # offline/online change availability; the rest apply to the robot's next command.
 NEXT_COMMAND_FAULTS = ("fail_next", "hang_next", "duplicate_next", "reorder_next")
@@ -19,6 +19,8 @@ NEXT_COMMAND_FAULTS = ("fail_next", "hang_next", "duplicate_next", "reorder_next
 @dataclass
 class SimRobot:
     online: bool = True
+    # Disconnected without telling anyone: no status event, no heartbeats, commands vanish.
+    silent: bool = False
     # Command IDs already accepted, and the final result of each, for idempotent dispatch.
     seen_commands: set[str] = field(default_factory=set)
     results: dict[str, RobotEvent] = field(default_factory=dict)
@@ -41,9 +43,22 @@ class SimulatedFleet:
         self.assets = {aid: SimAsset(defect_present=(aid == "tank-T101")) for aid in ASSETS}
         self.command_log: list[Command] = []
         self._sink: EventSink | None = None
+        self._heartbeat_sink: HeartbeatSink | None = None
+        self._heartbeat_task: asyncio.Task | None = None
 
-    def attach(self, sink: EventSink) -> None:
+    def attach(self, sink: EventSink, heartbeat: HeartbeatSink | None = None) -> None:
         self._sink = sink
+        self._heartbeat_sink = heartbeat
+
+    def start(self) -> None:
+        """Begin reporting liveness for every robot that is up."""
+        if self._heartbeat_sink is not None:
+            self._heartbeat_task = asyncio.create_task(self._heartbeats())
+
+    async def _heartbeats(self) -> None:
+        while True:
+            self._heartbeat_sink([rid for rid, r in self.robots.items() if r.online])
+            await asyncio.sleep(HEARTBEAT_INTERVAL_S * self.time_scale)
 
     async def _emit(self, event: RobotEvent) -> None:
         assert self._sink is not None, "simulator is not attached to an event sink"
@@ -63,6 +78,8 @@ class SimulatedFleet:
     async def dispatch(self, command: Command) -> None:
         """Idempotent per command ID: a repeated command is never executed twice."""
         robot = self.robots[command.robot_id]
+        if robot.silent:
+            return  # The command disappears; only a timeout or the heartbeat lease reveals it.
         if not robot.online:
             raise DispatchError(f"{command.robot_id} is unreachable")
         if command.command_id in robot.seen_commands:
@@ -156,18 +173,32 @@ class SimulatedFleet:
 
     # Fault injection and scenario controls
 
+    def _drop_connection(self, robot: SimRobot) -> None:
+        # Communication is lost. In-flight commands never report back.
+        for task in robot.active.values():
+            task.cancel()
+        robot.active.clear()
+        robot.unresponsive.clear()
+
     async def set_online(self, robot_id: str, online: bool) -> None:
+        """Announced change: the robot (or its fleet manager) reports it with a status event."""
         robot = self.robots[robot_id]
         if robot.online == online:
             return
         robot.online = online
+        robot.silent = False
         if not online:
-            # Communication is lost. In-flight commands never report back.
-            for task in robot.active.values():
-                task.cancel()
-            robot.active.clear()
-            robot.unresponsive.clear()
+            self._drop_connection(robot)
         await self._emit(self._event(robot_id, "status", online=online))
+
+    def lose_silently(self, robot_id: str) -> None:
+        """Unannounced loss (power or network failure): no status event, heartbeats stop."""
+        robot = self.robots[robot_id]
+        if not robot.online:
+            return
+        robot.online = False
+        robot.silent = True
+        self._drop_connection(robot)
 
     def arm_fault(self, robot_id: str, fault: str) -> None:
         if fault not in NEXT_COMMAND_FAULTS:
@@ -186,6 +217,7 @@ class SimulatedFleet:
             "robots": {
                 rid: {
                     "online": r.online,
+                    "silent": r.silent,
                     # In the order they apply: one per command.
                     "pending_faults": [f for f in NEXT_COMMAND_FAULTS if f in r.pending_faults],
                     "active_commands": sorted(r.active),
@@ -196,6 +228,8 @@ class SimulatedFleet:
         }
 
     async def shutdown(self) -> None:
+        if self._heartbeat_task:
+            self._heartbeat_task.cancel()
         for robot in self.robots.values():
             for task in robot.active.values():
                 task.cancel()

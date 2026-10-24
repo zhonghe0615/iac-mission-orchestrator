@@ -32,7 +32,7 @@ from typing import Any, Callable
 from .catalog import ACTIONS, ASSETS, Fleet
 from .plan import Plan, validate_plan
 from .planner import Planner, PlanningOutcome
-from .robots import Command, DispatchError, RobotEvent, RobotPort
+from .robots import HEARTBEAT_INTERVAL_S, HEARTBEAT_LEASE_S, Command, DispatchError, RobotEvent, RobotPort
 from .store import Store, new_id
 
 log = logging.getLogger(__name__)
@@ -82,6 +82,10 @@ class Engine:
         self._timers: dict[str, asyncio.Task] = {}
         self._worker: asyncio.Task | None = None
         self._background: set[asyncio.Task] = set()
+        # Liveness is tracked in memory: heartbeats are too frequent to write to the database.
+        self._last_seen: dict[str, float] = {}
+        self._expired: set[str] = set()
+        self._monitor: asyncio.Task | None = None
         self._loop: asyncio.AbstractEventLoop | None = None
         # Set when a robot may have become available; waiting missions are re-checked before commit.
         self._robots_freed = False
@@ -92,10 +96,13 @@ class Engine:
         self._loop = asyncio.get_running_loop()
         await self._locked(self._recover)
         self._worker = asyncio.create_task(self._consume_events())
+        now = time.monotonic()
+        self._last_seen = {rid: now for rid in self.fleet.robots}  # grace period after start
+        self._monitor = asyncio.create_task(self._watch_heartbeats())
 
     async def stop(self) -> None:
         # Unfinished planning is marked failed on the next start (see _recover).
-        for t in [self._worker, *self._timers.values(), *self._background]:
+        for t in [self._worker, self._monitor, *self._timers.values(), *self._background]:
             if t:
                 t.cancel()
         self._timers.clear()
@@ -144,6 +151,49 @@ class Engine:
                 self._start_timer(item.attempt_id, attempt["deadline_at"])
             elif item.kind == "cancel":
                 await self.port.cancel(item.robot_id, item.attempt_id)
+
+    # Liveness
+
+    def heartbeat(self, robot_ids: list[str]) -> None:
+        """Record a batch heartbeat from the integration layer."""
+        now = time.monotonic()
+        for rid in robot_ids:
+            self._last_seen[rid] = now
+            if rid in self._expired:
+                self._expired.discard(rid)
+                self._spawn(self._locked(self._on_heartbeat_resumed, rid))
+
+    def _spawn(self, coro) -> None:
+        task = asyncio.create_task(coro)
+        self._background.add(task)
+        task.add_done_callback(self._background.discard)
+
+    async def _watch_heartbeats(self) -> None:
+        interval = HEARTBEAT_INTERVAL_S * self.time_scale
+        lease = HEARTBEAT_LEASE_S * self.time_scale
+        last_check = time.monotonic()
+        while True:
+            await asyncio.sleep(interval)
+            now = time.monotonic()
+            if now - last_check > lease:
+                # This loop itself was stalled, so heartbeats were delayed too. Restart the clock
+                # instead of declaring robots dead because of our own pause.
+                self._last_seen = {rid: now for rid in self._last_seen}
+            last_check = now
+            stale = [rid for rid, seen in self._last_seen.items() if now - seen > lease and rid not in self._expired]
+            if stale:
+                self._expired.update(stale)
+                await self._locked(self._on_heartbeat_lost, stale)
+
+    def _on_heartbeat_lost(self, robot_ids: list[str]) -> None:
+        rows = self.store.robot_map()
+        for rid in robot_ids:
+            if rows[rid]["online"]:  # already offline if it announced it
+                self._on_robot_status(rid, False, reason=f"no heartbeat for {HEARTBEAT_LEASE_S:g}s")
+
+    def _on_heartbeat_resumed(self, robot_id: str) -> None:
+        if not self.store.robot(robot_id)["online"]:
+            self._on_robot_status(robot_id, True, reason="heartbeats resumed")
 
     def _start_timer(self, attempt_id: str, deadline: float) -> None:
         async def fire() -> None:
@@ -416,23 +466,24 @@ class Engine:
         else:
             self._attempt_failed(attempt, "failed", ev.payload.get("error", "action failed"), outcome_known=True)
 
-    def _on_robot_status(self, robot_id: str, online: bool) -> None:
+    def _on_robot_status(self, robot_id: str, online: bool, reason: str | None = None) -> None:
+        """Announced status events and heartbeat-lease expiry both arrive here."""
         name = self.fleet.name(robot_id)
+        why = f" ({reason})" if reason else ""
         if online:
             self.store.update_robot(robot_id, online=1, health="ok", health_reason="")
-            self._event(None, "robot_status", f"{name} is back online", robot_id=robot_id, online=True)
+            self._event(None, "robot_status", f"{name} is back online{why}", robot_id=robot_id, online=True)
         else:
-            self.store.update_robot(robot_id, online=0)
-            self._event(None, "robot_status", f"{name} went offline", robot_id=robot_id, online=False)
+            self.store.update_robot(robot_id, online=0, health_reason=reason or "")
+            self._event(None, "robot_status", f"{name} went offline{why}", robot_id=robot_id, online=False)
+            lost = f"{name} stopped sending heartbeats during the action" if reason else f"{name} went offline during the action"
             for attempt in self.store.open_attempts():
                 if attempt["robot_id"] != robot_id:
                     continue
                 if attempt["status"] == "cancel_requested":
                     self._close_attempt(attempt, "cancel_unconfirmed", "Robot went offline before confirming")
                 else:
-                    self._attempt_failed(
-                        attempt, "lost", f"{name} went offline during the action; outcome unknown", outcome_known=False
-                    )
+                    self._attempt_failed(attempt, "lost", f"{lost}; outcome unknown", outcome_known=False)
         self._robots_freed = True
 
     def _on_stale_result(self, attempt: dict, ev: RobotEvent, label: str) -> None:

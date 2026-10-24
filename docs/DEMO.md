@@ -20,6 +20,8 @@ If an LLM is configured, choose the LLM planner; otherwise the fixture planner i
 
 Variation (stale result): before starting, click **Time out next** on Scout A. Attempt 1 times out, Scout A is marked unresponsive, B takes over, and Scout A's late result later appears in the timeline as "stale result ignored" without changing state.
 
+Variation (silent failure): instead of **Take offline**, click **Lose silently** on Scout A while it inspects. For about 3 seconds it still looks busy and the panel notes "the orchestrator has not been told yet". Then the heartbeat lease expires: Scout A shows "no heartbeat for 3s", its attempt becomes `lost`, and Scout B takes over.
+
 Variation (no replacement): take Scout B offline before starting, then Scout A while t1 runs. The banner shows "Waiting for an eligible robot" with a reason for every robot. Bring Scout B online and the mission continues.
 
 ## 3. Approval (about 60 s)

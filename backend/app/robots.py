@@ -9,6 +9,12 @@ behind the same interface.
 from dataclasses import dataclass, field
 from typing import Awaitable, Callable, Protocol
 
+# Liveness: the integration layer reports which robots are alive at this interval,
+# in one batch, the way a fleet manager would. A robot missing for the lease is
+# treated as offline even if no status event ever arrives.
+HEARTBEAT_INTERVAL_S = 1.0
+HEARTBEAT_LEASE_S = 3.0
+
 
 @dataclass(frozen=True)
 class Command:
@@ -33,6 +39,7 @@ class DispatchError(Exception):
 
 
 EventSink = Callable[[RobotEvent], Awaitable[None]]
+HeartbeatSink = Callable[[list[str]], None]
 
 
 class RobotPort(Protocol):

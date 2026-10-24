@@ -80,6 +80,7 @@ The suite runs offline: robot timings are scaled down, and the LLM planner is te
 | Typed fleet config, a new robot type via config only, 520 robots with 40 concurrent missions, 20 types with 1,000 robots | `tests/test_fleet.py` |
 | Idempotency keys for operator commands, repeated robot commands | `tests/test_idempotency.py` |
 | Thread-safe reads, foreign-thread rejection, one server process per database | `tests/test_concurrency.py` |
+| Heartbeat lease: silent robot loss detected while busy or idle, recovery, no false alarms | `tests/test_liveness.py` |
 | HTTP API end to end | `tests/test_api.py` |
 
 ## Using the console
@@ -88,7 +89,7 @@ See [docs/DEMO.md](docs/DEMO.md) for the full walkthrough. In short:
 
 1. Submit a work order. The plan appears for review with its source (LLM, fixture, or operator edit). Edit it if needed; every edit is validated.
 2. Start the mission and watch tasks, attempts, evidence, and the timeline update live.
-3. Inject faults from the Fleet panel: take a robot offline, make its next command fail, time out, arrive twice, or arrive out of order.
+3. Inject faults from the Fleet panel: take a robot offline (announced) or lose it silently (detected by heartbeat), or make its next command fail, time out, arrive twice, or arrive out of order.
 4. Approve or reject the repair when asked.
 
 ## What is simulated and what is implemented
