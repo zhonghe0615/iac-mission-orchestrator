@@ -183,3 +183,28 @@ async def test_cancel_keeps_reservation_until_robot_confirms(h):
         lambda: h.store.task_attempts(mid, "t1")[0]["status"] == "cancelled", what="cancel confirmation"
     )
     assert h.store.robot("scout-a")["reserved_attempt"] is None
+
+
+async def test_independent_inspections_run_in_parallel_on_a_and_b(h):
+    # Thermal (t1) and visual (t2) have no dependency on each other; the repair waits for both.
+    parallel = {**FIXTURE_PLAN, "tasks": [dict(t) for t in FIXTURE_PLAN["tasks"]]}
+    parallel["tasks"][1]["depends_on"] = []
+    mid = await h.engine.create_mission("Inspect and resolve the suspected leak on tank T-101", "fixture", "tester")
+    await h.engine.update_plan(mid, parallel, "tester")
+    await h.engine.start_mission(mid, "tester")
+
+    # Both inspections are running at the same moment, each on its own Scout.
+    await h.wait(
+        lambda: h.task(mid, "t1")["status"] == "running" and h.task(mid, "t2")["status"] == "running",
+        what="t1 and t2 running together",
+    )
+    await h.wait_status(mid, "waiting_approval")
+
+    (thermal,) = h.store.task_attempts(mid, "t1")
+    (visual,) = h.store.task_attempts(mid, "t2")
+    assert {thermal["robot_id"], visual["robot_id"]} == {"scout-a", "scout-b"}
+    # The recorded attempt intervals overlap.
+    assert thermal["started_at"] < visual["ended_at"] and visual["started_at"] < thermal["ended_at"]
+    # The repair was not requested until both inspections had finished.
+    assert h.task(mid, "t3")["status"] == "awaiting_approval"
+    assert {e["task_id"] for e in h.store.evidence(mid)} == {"t1", "t2"}
