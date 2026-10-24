@@ -7,7 +7,7 @@ If an LLM is configured, choose the LLM planner; otherwise the fixture planner i
 ## 1. Planning (about 45 s)
 
 1. Keep the default work order about tank T-101 and click **Generate plan**.
-2. Point out the plan source next to the version ("LLM planner (model)" or "fixture planner"), and the planner call in the timeline. For the LLM, expand it to show the raw output and latency.
+2. Point out the plan source next to the version ("LLM planner" or "fixture planner"), and the planner call in the timeline. For the LLM, expand it to show the raw output and latency.
 3. Click **Edit plan**, delete the `condition` from the repair task, and click **Validate and save**. The backend rejects it: a repair must be conditioned on `defect_detected`. Click **Reset**.
 4. Note that the plan has no robot or approval fields: routing and approval belong to the orchestrator.
 

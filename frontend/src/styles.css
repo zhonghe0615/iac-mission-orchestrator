@@ -522,7 +522,7 @@ th {
 
 .ev {
   display: grid;
-  grid-template-columns: 76px 150px minmax(0, 1fr);
+  grid-template-columns: 22px 76px 150px minmax(0, 1fr);
   gap: 8px;
   padding: 5px 0;
   border-bottom: 1px solid var(--border);
@@ -531,7 +531,7 @@ th {
 
 @media (max-width: 640px) {
   .ev {
-    grid-template-columns: 70px minmax(0, 1fr);
+    grid-template-columns: 22px 70px minmax(0, 1fr);
   }
   .ev-kind {
     display: none;
@@ -547,35 +547,30 @@ th {
   font-size: 12px;
 }
 
+.ev-icon {
+  text-align: center;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
 .ev .checks,
 .ev .planner-call {
-  grid-column: 2 / -1;
+  grid-column: 3 / -1;
   margin: 0;
   padding-left: 16px;
   font-size: 12px;
 }
 
-.ev-approval_requested,
-.ev-waiting_resource {
+.sev-ok {
+  background: var(--ok-bg);
+}
+
+.sev-warn {
   background: var(--warn-bg);
 }
 
-.ev-attempt_failed,
-.ev-escalated,
-.ev-approval_rejected,
-.ev-planning_failed {
+.sev-fail {
   background: var(--danger-bg);
-}
-
-.ev-stale_result_ignored,
-.ev-stale_event_ignored,
-.ev-duplicate_event_ignored {
-  background: var(--muted-bg);
-}
-
-.ev-mission_closed,
-.ev-approval_granted {
-  background: var(--ok-bg);
 }
 
 .planner-call pre {
@@ -728,4 +723,29 @@ button.armed-button {
 
 .fault-title + .fault-row {
   margin-top: 3px;
+}
+
+.suggestion {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+button.chip {
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-size: 12px;
+  background: var(--info-bg);
+  border-color: var(--info-bg);
+  color: var(--info);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.suggestion-count {
+  margin-left: auto;
+  font-size: 11px;
 }

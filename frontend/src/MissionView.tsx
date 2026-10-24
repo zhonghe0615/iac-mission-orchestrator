@@ -408,6 +408,60 @@ function EvidenceList({ evidence }: { evidence: Evidence[] }) {
 
 const QUIET = new Set(["command_accepted", "mission_status"]);
 
+type Severity = "ok" | "warn" | "fail" | "info";
+
+const SEVERITY_BY_KIND: Record<string, Severity> = {
+  task_succeeded: "ok",
+  approval_granted: "ok",
+  plan_validated: "ok",
+  plan_edited: "ok",
+  cancel_confirmed: "ok",
+  approval_requested: "warn",
+  waiting_resource: "warn",
+  task_retry_scheduled: "warn",
+  task_retry_requested: "warn",
+  cancel_requested: "warn",
+  mission_cancelled: "warn",
+  recovery: "warn",
+  stale_result_ignored: "warn",
+  stale_event_ignored: "warn",
+  duplicate_event_ignored: "warn",
+  attempt_failed: "fail",
+  escalated: "fail",
+  approval_rejected: "fail",
+  planning_failed: "fail",
+};
+
+const OUTCOME_SEVERITY: Record<string, Severity> = {
+  resolved: "ok",
+  no_action_needed: "ok",
+  unresolved: "fail",
+  cancelled: "warn",
+  needs_intervention: "fail",
+  waiting_approval: "warn",
+  waiting_resource: "warn",
+};
+
+const SEVERITY_ICON: Record<Severity, { icon: string; text: string }> = {
+  ok: { icon: "✅", text: "success" },
+  warn: { icon: "⚠️", text: "warning" },
+  fail: { icon: "❌", text: "failure" },
+  info: { icon: "ℹ️", text: "info" },
+};
+
+function severity(e: AuditEvent): Severity {
+  if (e.kind === "mission_closed" || e.kind === "mission_status") {
+    const status = String(e.data.outcome ?? e.data.status ?? "");
+    return OUTCOME_SEVERITY[status] ?? "info";
+  }
+  if (e.kind === "planner_call") {
+    const outcome = e.data.outcome;
+    return outcome === "error" ? "fail" : outcome === "invalid" ? "warn" : "info";
+  }
+  if (e.kind === "policy_decision") return e.data.allowed === false ? "fail" : "info";
+  return SEVERITY_BY_KIND[e.kind] ?? "info";
+}
+
 function Timeline({ events }: { events: AuditEvent[] }) {
   const [all, setAll] = useState(false);
   const shown = (all ? events : events.filter((e) => !QUIET.has(e.kind))).slice().reverse();
@@ -420,14 +474,20 @@ function Timeline({ events }: { events: AuditEvent[] }) {
         </label>
       </div>
       <ol className="timeline">
-        {shown.map((e) => (
-          <li key={e.seq} className={`ev ev-${e.kind}`}>
+        {shown.map((e) => {
+          const sev = severity(e);
+          return (
+          <li key={e.seq} className={`ev sev-${sev}`}>
+            <span className="ev-icon" role="img" aria-label={SEVERITY_ICON[sev].text}>
+              {SEVERITY_ICON[sev].icon}
+            </span>
             <span className="mono ev-time">{time(e.ts)}</span>
             <span className="ev-kind">{label(e.kind)}</span>
             <span className="ev-msg">{e.message}</span>
             {(e.kind === "policy_decision" || e.kind === "planner_call") && <EventDetail event={e} />}
           </li>
-        ))}
+          );
+        })}
       </ol>
     </section>
   );
@@ -446,18 +506,15 @@ function EventDetail({ event }: { event: AuditEvent }) {
       </ul>
     );
   }
-  const { output, errors, latency_ms, model } = event.data as {
+  const { output, errors, latency_ms } = event.data as {
     output?: string;
     errors?: string[];
     latency_ms?: number;
-    model?: string;
   };
   if (!output && !errors) return null;
   return (
     <details className="planner-call">
-      <summary>
-        {model} {latency_ms !== undefined && `· ${latency_ms} ms`}
-      </summary>
+      <summary>Model output{latency_ms !== undefined && ` · ${latency_ms} ms`}</summary>
       {errors && (
         <ul>
           {errors.map((e, i) => (

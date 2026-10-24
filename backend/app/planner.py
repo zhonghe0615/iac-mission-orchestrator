@@ -159,7 +159,8 @@ class LLMPlanner:
         self.timeout_s = timeout_s
         self.max_corrections = max_corrections
         self.transport = transport
-        self.label = f"LLM planner ({model})"
+        # The model ID is recorded on every call for audit; the UI shows only "LLM planner".
+        self.label = "LLM planner"
 
     async def _complete(self, client: httpx.AsyncClient, messages: list[dict]) -> tuple[str, dict]:
         body: dict = {
@@ -203,7 +204,7 @@ class LLMPlanner:
                         outcome="error",
                         error=str(exc),
                         latency_ms=round((time.monotonic() - started) * 1000),
-                        summary=f"Model call {attempt} to {self.model} failed: {exc}",
+                        summary=f"LLM call {attempt} failed: {exc}",
                     )
                     calls.append(record)
                     return PlanningOutcome(plan=None, error=f"model call failed: {exc}", calls=calls)
@@ -219,13 +220,13 @@ class LLMPlanner:
                 except PlanValidationError as exc:
                     errors = exc.errors
                 else:
-                    record.update(outcome="valid", summary=f"Model call {attempt} to {self.model} returned a valid plan")
+                    record.update(outcome="valid", summary=f"LLM call {attempt} returned a valid plan")
                     calls.append(record)
                     return PlanningOutcome(plan=plan, calls=calls)
                 record.update(
                     outcome="invalid",
                     errors=errors,
-                    summary=f"Model call {attempt} returned an invalid plan ({len(errors)} problem(s))",
+                    summary=f"LLM call {attempt} returned an invalid plan ({len(errors)} problem(s))",
                 )
                 calls.append(record)
                 messages += [
