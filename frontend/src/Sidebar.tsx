@@ -280,7 +280,8 @@ function RobotRow({
           </button>
         </div>
       )}
-      <div className="fault-row">
+      <div className="fault-title">Inject failure</div>
+      <div className="fault-row" role="group" aria-label={`Inject failure on ${r.name}`}>
         {sim.online ? (
           <button className="small danger" onClick={() => onFault(r.id, "offline")} {...explain(AVAILABILITY_HELP.offline)}>
             Take offline
