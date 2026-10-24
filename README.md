@@ -6,6 +6,10 @@ A mission orchestration prototype for inspecting and resolving a suspected tank 
 
 Repository initialized. Application implementation has not started.
 
+## Implementation handover
+
+Read [the implementation handover](docs/IMPLEMENTATION_HANDOVER.md) before coding. It records confirmed requirements, proposed architecture, implementation milestones, acceptance criteria, and unresolved integration details.
+
 ## Planned scope
 
 - Generate and validate structured mission plans using a real LLM service.
