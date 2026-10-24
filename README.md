@@ -29,6 +29,8 @@ uv run python -m app
 
 Then open **http://127.0.0.1:8000**. Use `python -m app --port 9000` if port 8000 is taken.
 
+Stop the server with Ctrl+C. With the UI open, it takes up to 3 seconds to close the browser's live-update connection; a `CancelledError` traceback printed at that point is harmless.
+
 The database is created at `backend/data/orchestrator.db`. Delete that file to start from a clean state. Only one server process can use a database file at a time; a second one stops with a clear message.
 
 ### Enabling the real LLM planner

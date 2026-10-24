@@ -11,7 +11,9 @@ def main() -> None:
     parser.add_argument("--port", type=int, default=8000)
     args = parser.parse_args()
     print(f"Mission Orchestrator: open http://{args.host}:{args.port}")
-    uvicorn.run("app.main:app", host=args.host, port=args.port)
+    # Live-update streams from open browser tabs never close on their own; without a limit,
+    # Ctrl+C would wait for them indefinitely.
+    uvicorn.run("app.main:app", host=args.host, port=args.port, timeout_graceful_shutdown=3)
 
 
 if __name__ == "__main__":
