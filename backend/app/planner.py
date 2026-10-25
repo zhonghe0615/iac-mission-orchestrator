@@ -148,9 +148,16 @@ def _user_prompt(work_order: str, constraints: Constraints, fleet: Fleet) -> str
 
 
 def _extract_json(text: str) -> str:
-    """Accept a bare object or one wrapped in a Markdown code fence."""
+    """Accept a bare object, one in a Markdown code fence, or one surrounded by prose.
+
+    Providers that ignore response_format (such as Anthropic's OpenAI-compatible
+    endpoint) may add a sentence around the JSON.
+    """
     fenced = re.search(r"```(?:json)?\s*(\{.*\})\s*```", text, re.DOTALL)
-    return fenced.group(1) if fenced else text.strip()
+    if fenced:
+        return fenced.group(1)
+    start, end = text.find("{"), text.rfind("}")
+    return text[start : end + 1] if 0 <= start < end else text.strip()
 
 
 class LLMPlanner:

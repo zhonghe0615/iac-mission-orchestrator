@@ -67,6 +67,13 @@ async def test_invalid_output_gets_bounded_correction():
     assert "conditioned on an inspection finding" in seen[2]["messages"][-1]["content"]
 
 
+async def test_plan_surrounded_by_prose_is_accepted():
+    seen: list = []
+    text = "Here is the plan:\n" + json.dumps(FIXTURE_PLAN) + "\nIt inspects before any repair."
+    outcome = await planner([text], seen).plan("x", T101_RULES)
+    assert outcome.plan is not None and len(seen) == 1
+
+
 async def test_persistently_invalid_output_fails_without_fallback():
     seen: list = []
     outcome = await planner(["{}", "{}", "{}"], seen).plan("x", T101_RULES)
