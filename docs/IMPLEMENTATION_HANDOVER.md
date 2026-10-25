@@ -4,20 +4,17 @@
 
 This document hands implementation to the next coding agent. Build a working, reviewable orchestration prototype from the requirements below. Do not treat proposed implementation details as additional assessment requirements.
 
-- Repository: https://github.com/zhonghe0615/iac-mission-orchestrator (private).
-- Local workspace used during planning: `/Users/harvie/Documents/ChatGPT/IAC`.
 - Baseline: `5461f8c`, containing only README and ignore rules. No application, dependencies, tests, or model integration exist yet. This handover is added after that baseline.
-- Source assessment: `IAC_Orchestration_Assessment.pdf`, three pages. Local source path: `/Users/harvie/Desktop/IAC/IAC_Orchestration_Assessment.pdf`. The PDF has not been uploaded to the repository. A cloud environment may not have this file; the essential requirements are transcribed below.
+- Source assessment: `IAC_Orchestration_Assessment.pdf`, three pages. The PDF is not in the repository; the essential requirements are transcribed below.
 - No credentials are stored in the repository. The owner will provide model credentials separately.
 
 ## 2. Confirmed owner decisions
 
 - Frontend: React and TypeScript. Backend: Python and FastAPI. Database: SQLite.
-- All documentation and code comments must be in English. Communicate with the owner in Chinese. Use English for the product UI as proposed during planning.
+- All documentation and code comments must be in English. Use English for the product UI as proposed during planning.
 - The owner's intended model is named **GPT6 Luna**, with reasoning enabled when needed. This is a requested model name, not a verified API model identifier. Confirm provider access, the actual API identifier, and supported reasoning parameters before integration. Do not invent them or silently substitute a different model.
 - Credentials will arrive later. Continue independent implementation with an explicitly labeled mock planner, then verify real model integration when credentials are available. A mock-only submission is insufficient.
-- Aim for a deliverable the owner is satisfied with, beyond the assessment's suggested 6-8 hours if needed. The owner initially set an approximately 12-hour total budget, then clarified that exact time accounting should not distract from doing each necessary step properly. Keep scope disciplined; do not interpret this as unlimited scope.
-- All repository work belongs to personal account **zhonghe0615**. Do not create repositories or publish project material under any other account.
+- Aim for a deliverable the owner is satisfied with, beyond the assessment's suggested 6-8 hours if needed. Keep scope disciplined; do not interpret this as unlimited scope.
 
 ## 3. Assessment requirements
 
