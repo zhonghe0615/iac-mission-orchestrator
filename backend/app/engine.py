@@ -502,6 +502,10 @@ class Engine:
         name = self.fleet.name(robot_id)
         why = f" ({reason})" if reason else ""
         if online:
+            # Reporting in is proof of life: restart its lease, or the monitor could judge it by the
+            # last heartbeat from before it went offline and mark it unreachable straight away.
+            self._last_seen[robot_id] = time.monotonic()
+            self._expired.discard(robot_id)
             was_unreachable = self.store.robot(robot_id)["health"] == "unreachable"
             self.store.update_robot(robot_id, online=1, health="ok", health_reason="")
             state = "is reachable again" if was_unreachable else "is back online"

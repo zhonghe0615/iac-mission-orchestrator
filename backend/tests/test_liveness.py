@@ -1,5 +1,7 @@
 """Heartbeat liveness: robots that fail silently are detected by the lease, not only by command timeouts."""
 
+import time
+
 import pytest
 
 from app.catalog import ACTIONS
@@ -70,6 +72,25 @@ async def test_announced_offline_is_offline_not_unreachable(h):
     await h.sim.set_online("scout-a", False)
     await h.wait(lambda: availability(h, "scout-a") == "offline", what="scout-a offline")
     assert h.store.robot("scout-a")["health_reason"] == ""
+
+
+async def test_robot_announced_back_online_is_not_judged_by_old_heartbeats(h):
+    await h.sim.set_online("scout-b", False)
+    await h.wait(lambda: availability(h, "scout-b") == "offline", what="scout-b offline")
+    # Its last heartbeat is now older than the lease, but it has not been flagged yet.
+    h.engine._last_seen["scout-b"] -= 10 * LEASE
+    before = time.monotonic()
+    await h.sim.set_online("scout-b", True)
+    await h.wait(lambda: availability(h, "scout-b") == "available", what="scout-b back online")
+    assert h.engine._last_seen["scout-b"] >= before
+
+    # Scout B then takes Scout A's work without a false heartbeat alarm.
+    await h.sim.set_online("scout-a", False)
+    await h.wait(lambda: availability(h, "scout-a") == "offline", what="scout-a offline")
+    mid = await h.started_mission()
+    await h.wait_status(mid, "waiting_approval")
+    assert [(a["robot_id"], a["status"]) for a in h.store.task_attempts(mid, "t1")] == [("scout-b", "succeeded")]
+    assert heartbeat_losses(h) == []
 
 
 async def test_lease_is_configurable(tmp_path, monkeypatch):
