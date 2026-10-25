@@ -6,14 +6,23 @@ An LLM proposes a structured mission plan. Deterministic backend code validates 
 
 ## New here? Take the guided tour
 
-If you use [Claude Code](https://claude.com/claude-code), open this folder and run **`/iac-tour`**. It onboards the project on your machine:
+Open this folder in a coding agent and start the **`iac-tour`** skill:
+
+| Agent | How to start the tour |
+| --- | --- |
+| [Claude Code](https://claude.com/claude-code) | Type **`/iac-tour`** |
+| [Codex](https://developers.openai.com/codex) (CLI or IDE extension) | Type **`$iac-tour`**, or pick it from `/skills` |
+
+You can also just ask "I'm new to this repo, where do I start?"; both agents pick the skill from its description. Other agents are pointed to it by [AGENTS.md](AGENTS.md).
+
+The tour onboards the project on your machine:
 - installs what is missing, with your agreement;
 - runs the tests;
 - opens the console;
 - optionally connects your OpenAI or Anthropic API key;
 - walks you through the demo, the failure scenarios, and the code.
 
-The tour is plain Markdown in [.claude/skills/iac-tour/](.claude/skills/iac-tour/SKILL.md), so you can also read it directly. Its helper, `python3 .claude/skills/iac-tour/scripts/iac.py`, drives a running server from the terminal.
+There is one copy of the skill, in [.claude/skills/iac-tour/](.claude/skills/iac-tour/SKILL.md). Codex reads it through the symlink `.agents/skills/iac-tour`. On Windows, clone with `git clone -c core.symlinks=true` (symlinks may also need Developer Mode); otherwise Codex will not see the skill, and AGENTS.md still points the way. The tour is plain Markdown, so you can also read it directly. Its helper, `python3 .claude/skills/iac-tour/scripts/iac.py`, drives a running server from the terminal.
 
 ## Quick start
 
@@ -147,7 +156,9 @@ docs/
   DEMO.md            walkthrough script
   VERIFICATION.md    status of every requirement, with evidence
   AI_USAGE.md        AI tool usage
-.claude/skills/iac-tour/   guided tour for newcomers (Claude Code skill and helper script)
+.claude/skills/iac-tour/   guided tour for newcomers (skill and helper script)
+.agents/skills/iac-tour    symlink to the tour, where Codex looks for skills
+AGENTS.md                  points coding agents to the tour
   IMPLEMENTATION_HANDOVER.md   planning handover and acceptance criteria
 ```
 

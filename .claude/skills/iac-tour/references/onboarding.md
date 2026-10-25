@@ -2,7 +2,7 @@
 
 Written for macOS, which most reviewers use. Notes for Linux and Windows are at the end. The goal: tests pass, the console opens, and, if the reviewer has a key, the real LLM planner works.
 
-**Ask before installing anything.** Say what you will install and why, and wait for a yes. Installing is the only step that changes their machine outside this folder.
+**Ask before installing anything.** Say what you will install and why, and wait for a yes. Installing is the only step that changes their machine outside this folder. If you run commands in a sandbox, installing and starting the server may need network access; tell the reviewer that they may be asked to approve it.
 
 ## 1. Check what is already there
 
