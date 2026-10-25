@@ -29,7 +29,7 @@ Test names refer to `backend/tests/`. "Browser run" means headless Chrome drivin
 | Web UI: submit, review plan, robot availability, status, live timeline, approve/reject, inject failure | Verified | Browser run covers each; live updates over server-sent events; state survives a page reload |
 | Backend: reusable mission/task model, capability routing, explicit state machine, simulated adapter | Verified | `engine.py` transition table (DESIGN_REFERENCE.md §2); `test_new_robot_type_needs_only_configuration` |
 | Real LLM decision support with structured output and validation; mock is not the only mode | Verified | Real runs below; `test_planner.py` (bounded correction, no fixture fallback) |
-| Tests: success, approval denial, failure and recovery | Verified | 76 tests, passing on Python 3.10 and 3.12 |
+| Tests: success, approval denial, failure and recovery | Verified | 78 tests, passing on Python 3.10 and 3.12 |
 | At least one unhandled edge case documented | Verified | DESIGN.md §8 (concurrent missions on one asset, among others) |
 | Agent cannot bypass execution rules or issue low-level commands | Verified | The plan schema has no robot or approval fields (`test_invalid_plans_are_rejected`); repair is gated at runtime by approval bound to plan version and action |
 
@@ -59,7 +59,7 @@ Test names refer to `backend/tests/`. "Browser run" means headless Chrome drivin
 | Typed fleet; scales without code changes | `test_fleet.py`: 520 robots with 40 missions; 20 types with 1,000 robots; a new type through config only |
 | Idempotent operator commands and robot commands | `test_idempotency.py` |
 | Thread-safe store; one server process per database | `test_concurrency.py` |
-| Silent robot failures detected by a heartbeat lease (busy and idle robots, recovery, no false alarms); shown as unreachable, distinct from an announced offline; lease configurable | `test_liveness.py`; browser runs at real speed: silent loss detected after 2.6–3.1 s and work moved to Scout B, with an announced offline shown separately; zero false losses with 1,000 robots and 40 missions |
+| Silent robot failures detected by a heartbeat lease (busy and idle robots, recovery, no false alarms, including right after a robot announces it is back online); shown as unreachable, distinct from an announced offline; lease configurable | `test_liveness.py`; browser runs at real speed: silent loss detected after 2.6–3.1 s and work moved to Scout B, with an announced offline shown separately; zero false losses with 1,000 robots and 40 missions |
 | Tests detect regressions | Each key guard was removed in turn and its tests failed (approval gate, stale-result check, freed-robot recheck, store lock, snapshot reads, idempotency claim, command dedupe, exclusive database lock, loop check) |
 
 ## Real model runs

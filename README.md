@@ -4,6 +4,17 @@ A working prototype of an orchestration layer that plans, executes, and recovers
 
 An LLM proposes a structured mission plan. Deterministic backend code validates it, routes tasks by capability and availability, enforces human approval before the repair, and handles failures, timeouts, and late or duplicate events without losing mission history.
 
+## New here? Take the guided tour
+
+If you use [Claude Code](https://claude.com/claude-code), open this folder and run **`/iac-tour`**. It onboards the project on your machine:
+- installs what is missing, with your agreement;
+- runs the tests;
+- opens the console;
+- optionally connects your OpenAI or Anthropic API key;
+- walks you through the demo, the failure scenarios, and the code.
+
+The tour is plain Markdown in [.claude/skills/iac-tour/](.claude/skills/iac-tour/SKILL.md), so you can also read it directly. Its helper, `python3 .claude/skills/iac-tour/scripts/iac.py`, drives a running server from the terminal.
+
 ## Quick start
 
 Requirements: **Python 3.10 or newer**. Nothing else: the operator UI is already built into `frontend/dist` and served by the backend. Node.js is needed only to change the UI.
@@ -41,7 +52,14 @@ Without credentials, only the deterministic **fixture planner** is offered, and 
 cp backend/.env.example backend/.env    # Windows: copy backend\.env.example backend\.env
 ```
 
-Set `LLM_API_KEY` and `LLM_MODEL`, and `LLM_BASE_URL` if you are not using the OpenAI endpoint. Any OpenAI-compatible Chat Completions API works. `LLM_REASONING_EFFORT` is sent only when set. There is intentionally no default model name. Restart the server; the planner selector then offers the LLM planner.
+Set `LLM_API_KEY` and `LLM_MODEL`, and `LLM_BASE_URL` if you are not using the OpenAI endpoint. Any OpenAI-compatible Chat Completions API works:
+
+| Provider | `LLM_BASE_URL` | `LLM_MODEL` | `LLM_REASONING_EFFORT` |
+| --- | --- | --- | --- |
+| OpenAI | `https://api.openai.com/v1` | `gpt-6-luna` (verified, see `docs/VERIFICATION.md`) | `medium` |
+| Anthropic | `https://api.anthropic.com/v1` | `claude-sonnet-5-5` or `claude-opus-5-5` (per Anthropic's OpenAI-compatibility docs; not yet run live here) | leave empty |
+
+`LLM_REASONING_EFFORT` is sent only when set. There is intentionally no default model name. Restart the server; the planner selector then offers the LLM planner.
 
 ### Changing the fleet
 
@@ -129,6 +147,7 @@ docs/
   DEMO.md            walkthrough script
   VERIFICATION.md    status of every requirement, with evidence
   AI_USAGE.md        AI tool usage
+.claude/skills/iac-tour/   guided tour for newcomers (Claude Code skill and helper script)
   IMPLEMENTATION_HANDOVER.md   planning handover and acceptance criteria
 ```
 
