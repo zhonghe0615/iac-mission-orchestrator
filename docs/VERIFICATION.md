@@ -40,7 +40,7 @@ Test names refer to `backend/tests/`. "Browser run" means headless Chrome drivin
 | Technical design (about 2–4 pages) | Verified | `docs/DESIGN.md`, about 1,800 words (roughly 4 pages), answers the key question of each of the six assessment topics; full detail in `docs/DESIGN_REFERENCE.md` |
 | README with setup, launch, simulated versus implemented | Verified | Followed from a fresh GitHub clone with pip on Python 3.10 |
 | Demo video or live walkthrough | Incomplete | Script ready in `docs/DEMO.md`; recording or walkthrough is the author's step |
-| AI tool usage disclosure | Incomplete | `docs/AI_USAGE.md` drafted; the author's own judgments still to be added |
+| AI tool usage disclosure | Verified | `docs/AI_USAGE.md`: tools used at each stage, decisions made by the author, accepted proposals, and how the work was checked; reviewed by the author |
 
 ## Bonuses
 
