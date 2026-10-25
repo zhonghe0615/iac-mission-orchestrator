@@ -146,6 +146,8 @@ The ceiling is the single process with one lock and SQLite: every event is handl
 | Orchestration ↔ Robot Integration Layer | Commands `{command_id, robot_id, action, args}` and events `{event_id, command_id, type, payload}`, plus status queries and cancellation. Orchestration never sends motion primitives. |
 | Orchestration → operator interfaces | Read models for missions, tasks, attempts, evidence, robot availability, and a change stream. |
 
+**Communication protocol: demo versus production.** The demo uses HTTP/JSON at its API boundary to simplify setup, inspection, and integration, with Pydantic schemas validating requests. The simulated Robot Integration Layer currently runs in-process rather than over a network. For production service-to-service communication between orchestration and the Robot Integration Layer, the proposed choice is gRPC with Protobuf: explicit versioned schemas and generated clients support integration across languages and services, while binary serialization and streaming support efficient communication. Browser-facing APIs can remain HTTP/JSON. This is a proposed production evolution, not an implemented transport; command IDs, event correlation, approval rules, deduplication, and unknown-outcome handling remain unchanged and must still be enforced by application code.
+
 **Shared across robot types:** capability names, the action catalog (arguments, findings, risk, retry safety, timeouts), mission/task/attempt state, evidence and provenance, and events. **Robot- or OEM-specific:** how an action is executed, navigation and motion, local safety interlocks, sensor formats, and OEM fleet-manager scheduling. These sit behind the Robot Integration Layer adapter.
 
 **Staying generic.** New robot brands add an adapter and declare capabilities. New sites add assets and context. New mission types add catalog actions and validation rules. The engine, routing, approval, and audit code do not change.
@@ -162,6 +164,20 @@ The ceiling is the single process with one lock and SQLite: every event is handl
 - **Invalid or unsafe LLM plans:** already blocked by validation, with bounded correction and visible failure. Add red-team test suites for prompts, evaluation of plan quality over time, and policy rules that are versioned and reviewed like code.
 - **Understandable failure:** every state carries a reason string, the timeline records why each decision was made, and the UI states what the mission is waiting for and what the operator can do.
 
+**Recovery contract.** Preserve completed work, evidence, plan versions, and every execution attempt so an operator can see what happened, why progress stopped, and which actions remain available. Distinguish confirmed failure from an unknown outcome: a timeout does not prove that a physical action never occurred. The prototype retries safe inspections and pauses uncertain repairs. Production recovery would query the integration layer using the original command ID, reconcile the actual result, and resume only eligible remaining tasks. Unresolved outcomes stay with an authorized operator; manual completion or replanning must record the reason and supporting evidence rather than overwrite history. Planner failure leaves the mission visibly unplanned; invalid output never authorizes execution.
+
+**External-system failures (production proposal).** Persist pending integration operations with correlation IDs, retry counts, and a visible reason. Deduplicate incoming work orders by their source ID; retry outbound status updates with bounded backoff and a stable idempotency key where the destination supports it. If delivery is ambiguous and the destination cannot deduplicate, query or reconcile before resending. An unavailable approval service leaves dependent actions blocked until a valid decision is recorded. An unavailable evidence store leaves evidence-dependent actions and outcome confirmation blocked until required evidence is durably stored and referenced; retain uploads locally within a defined capacity limit, then pause evidence-producing work if that limit is reached. Status-reporting failures do not erase completed physical work or rerun the mission. Exhausted retries escalate with an owner and a recovery action. These external connectors are not implemented in the prototype.
+
+**Security and independent physical safeguards (production proposal).** Treat work orders, retrieved documents, and robot/tool outputs as untrusted input: none may grant permissions or override execution policy. The prototype already restricts plans to catalog actions and arguments, enforces target and repair constraints, and gates repairs on approval. These controls do not establish protection against compromised identities, adapters, or cloud services.
+
+Before physical deployment, add:
+- **Identity and control boundaries:** authenticated users with site-scoped roles, authenticated service/device connections, least-privilege adapter credentials, and auditable control handoffs. The planner must have no direct robot credentials or unrestricted SDK access. Security-relevant policy and asset-map changes require authorized, versioned review.
+- **Independent execution checks:** validate the resolved physical target, permitted operating area, action parameters, and resource/control ownership at the integration boundary. Reject stale, unauthorized, or out-of-policy commands even when the cloud sends them. Define command expiry and revocation behavior; do not equate a valid action name with a safe physical action.
+- **Local safety authority:** agree with OEMs and field teams on enforceable geofences, collision/person protection, emergency stops, and loss-of-link behavior appropriate to each robot and site. Cloud commands and LLM output must not disable these protections. On uncertainty, use the locally defined safe response; for an aircraft, this may mean hold, return, or controlled landing rather than simply stopping. Human approval is an additional gate, not a substitute for these safeguards.
+- **Validation before rollout:** test malicious instructions, forged/replayed commands, altered target mappings, expired credentials, cloud disconnects, and attempts to bypass local restrictions in simulation and vendor test environments, followed by controlled field trials. Verify both blocked commands and the resulting physical behavior with OEM/field specialists. Record residual risks and acceptance criteria before expanding deployment.
+
+These are planned controls, not implemented or validated demo capabilities. Robots are simulated; the prototype's passing tests demonstrate orchestration rules, not end-to-end cybersecurity or physical safety assurance.
+
 ## 5. Build versus buy
 
 | Area | Choice | Reasoning |
@@ -170,27 +186,91 @@ The ceiling is the single process with one lock and SQLite: every event is handl
 | Agent framework | None; direct API calls | One structured call with validation does not need a framework. Lock-in is limited to the request format. |
 | LLM | Rented | Commodity; keep the provider configurable and the planner advisory. |
 | OEM fleet managers, robot drivers | Integrate, do not rebuild | Vendors own motion and safety. Orchestration should coordinate across them. |
-| Facility systems (CMMS, work-order tools) | Integrate through adapters | Customer-specific; build thin connectors. |
+| Robot-ops platforms | Reuse existing tooling or buy selected capabilities | Device monitoring, diagnostics, logs, and deployment; preserve one explicit control owner per robot. |
+| Facility systems (CMMS, work-order tools) | Integrate through adapters | Preserve customer ownership of assets and work orders; IAC owns mission execution and evidence references. |
 
 Evaluate options on integration effort, failure modes and observability, cost at expected volume, control over safety-relevant behavior, and exit cost. IAC's durable differentiation is the cross-fleet capability model, safe execution semantics, governance, and site onboarding; queues, databases, workflow runtimes, and model hosting are commodity.
 
+**Robot-ops platforms.** Evaluate existing platforms or partners for device monitoring, remote diagnostics, logs, and software deployment before building these capabilities. Start with the customer's existing tooling where it is adequate. IAC owns mission intent, cross-fleet task assignment, approval, and audit; OEM systems retain local execution and safety authority. If a platform also schedules work or offers remote control, define one control owner per robot and an explicit handoff. Operator takeovers must be visible to IAC and block conflicting dispatches. Select only the operational capabilities needed for the pilot rather than buying an overlapping orchestration stack.
+
+**Customer facility systems.** Keep the customer's CMMS/EAM authoritative for asset records and work orders, and its identity provider authoritative for users and roles. IAC owns mission plans, attempts, execution decisions, and evidence references. Thin connectors map external asset/work-order IDs to IAC IDs, deduplicate intake, and write back outcomes and evidence without duplicating the customer's asset registry or ticket workflow. Agree on field ownership and completion rules: a resolved robot mission does not automatically close a maintenance ticket unless the customer explicitly defines that mapping. Connector outages follow the recovery rules in section 4.
+
+**Selection method.** Run a time-boxed comparison using the same inspection mission and fault scenarios, including disconnects, duplicate delivery, restart, and unknown physical outcomes. Reject options that cannot preserve required approval and command semantics, expose execution state, or meet agreed data-access requirements. Compare the remaining options on the evidence below; choose the smallest option that meets pilot needs. These are proposed procurement criteria, not completed vendor evaluations.
+
+| Criterion | Evidence used to decide |
+| --- | --- |
+| Cost | Twelve-month total cost at pilot and expected fleet volume: licenses, hosting, storage/egress, integration, support, and on-call effort. Compare with maintaining the same capability internally. |
+| Integration effort | Working adapter spike; supported robot/API versions; time to first accepted mission; custom mappings, deployment prerequisites, and vendor support needed. |
+| Reliability | Observed recovery under the fault scenarios; durable state and deduplication behavior; actionable diagnostics; support and outage responsibilities. |
+| Control | Ability to enforce IAC policy, approval, cancellation, and reconciliation rules without bypass paths or competing dispatch authority. |
+| Future lock-in | Exportable mission/evidence history, stable identifiers, documented interfaces, and a replacement exercise showing which adapters or workflows must change. Include contractual data access and migration cost. |
+
+Keep vendor-specific APIs behind adapters and retain IAC-owned schemas and audit records, while recognizing that workflow-runtime migrations can still be substantial. The demo's custom state machine demonstrates mission semantics; it is not a commitment to rebuild a general-purpose durable workflow engine in production.
+
 ## 6. First 90 days
 
-Scope: four quadrupeds and five mobile manipulators; gas detection, visual/thermal inspection, material handling, and welding; approvals, exception handling, and audit logs.
+The target fleet is four quadrupeds and five mobile manipulators. The following is a proposed field-delivery plan; the current prototype validates orchestration with simulated robots, not physical execution.
 
-- **Days 1–30:** ship visual/thermal inspection with evidence capture end to end on one site in simulation, then on one real robot class. Standardize the mission, task, capability, resource, and event model and the command/event contract with integration engineers. Defer welding: highest risk, most site-specific.
-- **Days 31–60:** add gas detection, reusing inspection primitives, and approval-gated material handling. Add durable execution, reconciliation for unknown outcomes, and role-based approvals. Staged rollout: simulation, shadow mode next to manual procedures, then supervised runs with field teams.
-- **Days 61–90:** second site and a second robot vendor to prove the model stays generic; mission templates; operator feedback loop on the console; begin a welding pilot behind two-person approval.
+**Smallest useful product.** One operator can submit an inspection work order, review its plan, run it on one real robot type at one site, and receive evidence with either a clear result or an actionable escalation. Every command and intervention is auditable. Proving the same workflow on a second robot type is the next reuse milestone, not a prerequisite for the first customer pilot.
 
-Dependencies: robot integration engineers for adapters and command idempotency; field teams for site maps and safety rules; customers for work-order integration and approval policy; vendors for API access and status semantics.
+### Priorities and delivery gates
 
-Success metrics: mission success rate, mean time to recover from a failed attempt, operator interventions per mission, share of tasks reused across mission types, and onboarding time for a new robot type or mission template. The prototype already computes several of these from its audit data.
+| Period | Deliver and validate | Defer or gate |
+| --- | --- | --- |
+| **Days 1–30** | Ship visual/thermal **inspect-and-escalate**: work order → reviewed plan → inspection → evidence → operator handoff. Agree on the shared contract below, establish the manual baseline, and connect one real robot type. Run simulation and shadow evaluation before a supervised inspection pilot. | Defer physical repair, welding, and unattended operation. If vendor or site access is delayed, deliver the tested adapter contract and simulation workflow; do not count that as field validation. |
+| **Days 31–60** | Stabilize inspection; add gas sensing within that workflow only after sensor validation. Pilot **approval-gated material delivery** as the second workflow, with pickup/drop-off confirmation, resource reservations, trusted approver identities, and reconciliation of unknown command outcomes. | Start material delivery only after site and integration readiness review. Keep ambiguous outcomes with an operator; do not automatically repeat a potentially completed physical action. |
+| **Days 61–90** | Reuse the proven workflow on a second robot type/vendor, then a second site if the first remains stable. Turn repeated steps into mission templates and measure onboarding effort. | Welding remains deferred pending a separate safety review, qualified procedures, and vendor/field-team sign-off. Calendar dates alone do not authorize expansion. |
 
-The smallest useful product: one repeatable inspection-and-escalation workflow running reliably across two robot types, with complete audit records.
+### Minimum shared model
+
+Standardize these contracts with integration engineers in the first month. Existing code provides a starting point; asset reservations and versioned external contracts still need field implementation.
+
+| Model | Minimum contract |
+| --- | --- |
+| **Mission** | ID, source work-order reference, target asset, constraints, plan version, lifecycle state, and business outcome. |
+| **Task** | Mission-scoped ID, action and arguments, dependencies/conditions, required capabilities, approval policy, and state. Separate attempts hold robot assignment, command ID, timestamps, and result. |
+| **Capability** | Stable identifier and versioned input/result contract. Robot types advertise capabilities; actions declare risk, timeout, and retry safety. |
+| **Resource** | Robot, asset, or shared work-zone ID; availability; reservation owner; acquisition and release rules. An uncertain physical outcome must not silently release an occupied resource. |
+| **Event** | Unique ID, source, type, schema version, occurrence/receipt times, correlation to mission/task/attempt/command, and payload. Define deduplication and stale-event handling. |
+
+### Testing and operator feedback
+
+**Simulation:** extend the existing success, rejection, fault, timeout, duplicate/out-of-order event, restart, and contention tests with vendor adapter contract tests and representative customer work orders. Check approval enforcement, preserved history, resource exclusivity, and no automatic repetition of an intervention with an unknown outcome. Simulation does not establish sensor accuracy or physical safety.
+
+**Field stages:** shadow mode proposes plans without dispatching commands; operators compare them with approved procedures. Supervised runs then execute one bounded inspection workflow using established robot stop controls. Before expansion, the customer and field team review an agreed sample of runs for evidence completeness, inspection quality, recovery behavior, and intervention rate. Approval bypass, duplicate physical action, or unexpected physical behavior stops the affected pilot; ambiguous outcomes require reconciliation before resuming. Return affected work to the existing manual procedure when a gate fails.
+
+**Feedback from day one:** capture plan edits, rejection reasons, manual takeovers, and unclear UI states. Review missions weekly with operators and integration engineers; assign each issue an owner and turn accepted changes into regression cases, catalog/template updates, or UI fixes. Compare results before and after changes. Feedback never changes execution policy automatically.
+
+### Dependencies and success measures
+
+Integration engineers own adapter mappings, durable command deduplication, cancellation, and status reconciliation. Vendors supply API/sandbox access and documented command, sensor, and safety semantics. Field teams supply maps, operating boundaries, stop/recovery procedures, and supervised test time. Customers supply representative work orders, approvers, acceptance criteria, and the manual baseline. Missing status semantics blocks automatic reconciliation; missing site approval blocks physical trials.
+
+Agree on numerical targets and sample sizes during days 1–30 using that baseline; do not invent field results from simulator runs. Track:
+
+- **Mission success:** accepted business outcomes / started missions, reported separately by workflow. A correct no-defect result succeeds; a rejected repair is a valid control outcome but does not resolve the defect.
+- **Recovery time:** fault detection to resumed execution, with unresolved cases and time to operator escalation reported separately.
+- **Operator interventions:** unplanned takeovers per mission, separate from required approvals.
+- **Task reuse:** share of task instances using existing action contracts/templates without customer-specific engine changes.
+- **Onboarding time:** elapsed time and engineering effort from agreed API/site prerequisites to an accepted supervised run for a new robot type or template; report external waiting time separately.
+
+These are proposed pilot measures. The prototype's audit-derived metrics are useful evidence, but are not yet the complete field scorecard.
 
 ## 7. Team and customer execution
 
-First additions: a robot integration engineer (adapters, command idempotency, status semantics) and a product-minded full-stack engineer for the operator console; a contractor for safety and compliance review before any physical repair action. With sales and solutions teams: a shared intake template that maps customer requests to catalog actions. Requests that do not fit become catalog or capability proposals with an owner, not one-off code paths. A request becomes a platform primitive only once it generalizes across at least two customers or sites; until then it lives in site configuration.
+**Initial team and ownership.**
+
+1. **My ownership:** cloud infrastructure, backend architecture, AI planning and integration, and full-stack implementation. An additional full-stack engineering hire is not the first priority.
+2. **First addition — robot integration engineer:** own OEM adapters, command idempotency, status semantics, and field integration debugging.
+3. **Next — UX/product designer:** engage on a project or part-time basis to design the operator console, covering multi-mission situational awareness, evidence-led approvals, exception handling, and clear control handoffs. Validate prototypes with operators through workflow observation and usability tests; the role goes beyond visual styling.
+4. **Before physical interventions go live — safety specialist:** engage someone with relevant robotics/site experience to review the deployment with OEM and field teams.
+
+**Working with sales and solutions.**
+
+1. **Joint discovery:** sales owns the business outcome and commercial context; solutions documents the current operating procedure, robot fleet, site constraints, and integration dependencies; engineering assesses feasibility, risk, and reuse potential. Capture these in a shared intake brief.
+2. **Scope before commitment:** agree on a bounded pilot, measurable acceptance criteria, customer prerequisites, delivery ownership, and explicit exclusions before committing to dates. Separate supported capabilities from discovery work, and review scope changes against their cost and schedule impact.
+3. **Classify implementation work:** map each request to existing configuration, mission templates, OEM/system adapters, or a proposed platform capability. Keep customer-specific identifiers and policies outside the orchestration core. New execution semantics require a design review, a versioned contract, and regression tests.
+4. **Promote proven reuse:** validate a candidate abstraction against a second customer or site before making it a shared platform primitive. Until then, isolate it in the appropriate configuration, template, or adapter; do not force behavior that requires code into configuration. Assign an owner and document support and compatibility expectations.
+5. **Close the feedback loop:** review pilot evidence and operator feedback regularly with sales and solutions. Prioritize improvements by customer value, operational risk, repeat demand, and ongoing support cost; feed the results into qualification guidance and the platform roadmap.
 
 ## 8. Known limitations and unhandled edge cases
 

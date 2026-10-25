@@ -1,6 +1,6 @@
 # AI Tool Usage
 
-I used AI coding agents heavily, as the assessment encourages. This page separates what the tools did from the decisions I made.
+I used AI coding agents throughout development. Below is a summary of their contributions and the design decisions I made.
 
 **Who decided what.** I set the direction at every critical point: scope and priorities, which proposals to accept, which review findings to act on and in what order, and when the work was done. The tools proposed designs and made implementation-level choices within that direction. I judged their work by running the system, reading the evidence, and getting an independent review, not by taking their reports at face value.
 
@@ -13,7 +13,7 @@ I used AI coding agents heavily, as the assessment encourages. This page separat
 
 ## What the AI accelerated
 
-Nearly all of the typing: implementation, test suites, UI styling, documentation drafts, and repetitive verification (repeat test runs, mutation checks that disable a guard to confirm its test fails, browser walkthroughs, fresh-clone install checks). Work that would have taken days took one long session.
+Implementation, test suites, UI styling, documentation drafts, and repetitive verification (repeat test runs, mutation checks that disable a guard to confirm its test fails, browser walkthroughs, and fresh-clone install checks). The agents also recorded and edited the demo video following my demonstration plan. Work all above would have taken days took one long session.
 
 ## Decisions I made
 
