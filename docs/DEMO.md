@@ -2,14 +2,15 @@
 
 A repeatable 3–5 minute script. Start the app (see README), open http://127.0.0.1:8000, and set an operator name in the top bar. To reset everything between runs, stop the server and delete `backend/data/orchestrator.db`.
 
-If an LLM is configured, choose the LLM planner; otherwise the fixture planner is used and labelled as such. The fixture is a stand-in, not the LLM requirement.
+If an LLM is configured, choose the LLM planner; otherwise the fixture planner is used and labelled as such. The fixture is a stand-in, not the LLM requirement, and it only accepts T-101 with repairs allowed.
 
 ## 1. Planning (about 45 s)
 
-1. Keep the default work order about tank T-101 and click **Generate plan**.
+1. Keep the default work order about tank T-101, with target **Storage Tank T-101** and **Allow repairs** ticked, and click **Generate plan**.
 2. Point out the plan source next to the version ("LLM planner" or "fixture planner"), and the planner call in the timeline. For the LLM, expand it to show the raw output and latency.
 3. Click **Edit plan**, delete the `condition` from the repair task, and click **Validate and save**. The backend rejects it: a repair must be conditioned on `defect_detected`. Click **Reset**.
 4. Note that the plan has no robot or approval fields: routing and approval belong to the orchestrator.
+5. Optional, with the LLM planner: click the **Survey only, no repairs** example. It sets the target to T-102 and clears **Allow repairs**. The plan is a single inspection of T-102. A plan for another asset, or one with a repair, would be rejected and sent back to the model.
 
 ## 2. Execution, failure, and recovery (about 90 s)
 
@@ -40,4 +41,4 @@ Variation (no replacement): take Scout B offline before starting, then Scout A w
 
 - Refresh the page: everything is read back from the backend.
 - The metrics panel shows retries, reassignments, time to recover, and ignored stale/duplicate events.
-- Optional restart demo: stop the backend while a mission waits for approval, start it again, and approve. The mission resumes from storage.
+- Optional restart demo: stop the backend while a mission waits for approval, start it again, and approve. The mission resumes from storage. A restart after the repair also works: the simulated tank stays repaired, and verification passes.

@@ -31,7 +31,7 @@ Then open **http://127.0.0.1:8000**. Use `python -m app --port 9000` if port 800
 
 Stop the server with Ctrl+C. With the UI open, it takes up to 3 seconds to close the browser's live-update connection; a `CancelledError` traceback printed at that point is harmless.
 
-The database is created at `backend/data/orchestrator.db`. Delete that file to start from a clean state. Only one server process can use a database file at a time; a second one stops with a clear message.
+The database is created at `backend/data/orchestrator.db`, with the simulated tank state next to it in `orchestrator.sim.json`. Delete the database to start from a clean state; the tank state resets with it. Only one server process can use a database file at a time; a second one stops with a clear message.
 
 ### Enabling the real LLM planner
 
@@ -75,8 +75,9 @@ The suite runs offline: robot timings are scaled down, and the LLM planner is te
 | Approved repair, denied repair, failure and recovery (the required categories) | `tests/test_missions.py` |
 | No eligible robot, late result after reassignment, unknown repair outcome, retry budget, cancellation, approval bypass attempts | `tests/test_missions.py` |
 | Plan validation: unsupported actions, bad arguments, cycles, unsafe repair sequencing, attempts to set approval or robots in a plan | `tests/test_plan.py` |
+| Operator constraints: wrong target or a disallowed repair is rejected for model, fixture, and edited plans, and blocked again at dispatch | `tests/test_constraints.py` |
 | LLM harness: structured request, bounded correction, visible failure, no fixture fallback | `tests/test_planner.py` |
-| Duplicate and out-of-order events, restart recovery, metrics | `tests/test_reliability.py` |
+| Duplicate and out-of-order events, restart recovery (including between repair and verification), metrics | `tests/test_reliability.py` |
 | Typed fleet config, a new robot type via config only, 520 robots with 40 concurrent missions, 20 types with 1,000 robots | `tests/test_fleet.py` |
 | Idempotency keys for operator commands, repeated robot commands | `tests/test_idempotency.py` |
 | Thread-safe reads, foreign-thread rejection, one server process per database | `tests/test_concurrency.py` |
@@ -87,7 +88,7 @@ The suite runs offline: robot timings are scaled down, and the LLM planner is te
 
 See [docs/DEMO.md](docs/DEMO.md) for the full walkthrough. In short:
 
-1. Submit a work order. The plan appears for review with its source (LLM, fixture, or operator edit). Edit it if needed; every edit is validated.
+1. Submit a work order with its target asset and whether repairs are allowed. Every plan is checked against those two fields. The plan appears for review with its source (LLM, fixture, or operator edit). Edit it if needed; every edit is validated.
 2. Start the mission and watch tasks, attempts, evidence, and the timeline update live.
 3. Inject faults from the Fleet panel: take a robot offline (announced) or lose it silently (detected by heartbeat), or make its next command fail, time out, arrive twice, or arrive out of order.
 4. Approve or reject the repair when asked.
@@ -97,8 +98,8 @@ See [docs/DEMO.md](docs/DEMO.md) for the full walkthrough. In short:
 | Implemented (real code paths) | Simulated |
 | --- | --- |
 | LLM planning harness, structured output, validation, bounded correction | Robots: actions are timers that return scripted findings |
-| Plan validation for model and operator plans | Sensor data and images (placeholder values and `sim://` references) |
-| Mission/task/attempt state machine, dependencies, conditions | The tank and its defect (in memory; reset on restart) |
+| Plan validation for model and operator plans, including the operator's target and repair constraint | Sensor data and images (placeholder values and `sim://` references) |
+| Mission/task/attempt state machine, dependencies, conditions | The tanks and the T-101 defect (saved next to the database, so a repair survives a restart; deleting the database resets them) |
 | Capability routing, reservations, policy checks | Network faults (injected explicitly by the operator) |
 | Approval binding to plan version and action, single use | |
 | Timeouts, retries, reassignment, escalation, cancellation semantics | |
@@ -123,7 +124,8 @@ backend/
   tests/
 frontend/            React + TypeScript console (built output committed in dist/)
 docs/
-  DESIGN.md          architecture, tradeoffs, production path
+  DESIGN.md          technical design for review (about 4 pages)
+  DESIGN_REFERENCE.md  full design: transition table, idempotency, concurrency, scaling
   DEMO.md            walkthrough script
   VERIFICATION.md    status of every requirement, with evidence
   AI_USAGE.md        AI tool usage
@@ -143,6 +145,6 @@ npm run build    # updates frontend/dist, which the backend serves
 
 ## Known limitations
 
-See [docs/DESIGN.md](docs/DESIGN.md#8-known-limitations-and-unhandled-edge-cases). Most notably: two missions can target the same asset at the same time, there is no authentication (operator names are self-reported), and an unknown repair outcome always goes to the operator rather than being reconciled automatically.
+See [docs/DESIGN.md](docs/DESIGN.md#8-known-limitations). Most notably: two missions can target the same asset at the same time, only the target and repair permission are enforced from the work order (other instructions rely on the model), there is no authentication (operator names are self-reported), and an unknown repair outcome always goes to the operator rather than being reconciled automatically.
 
 All documentation and code comments are in English. Credentials stay outside version control (`backend/.env` is ignored).

@@ -1,4 +1,6 @@
-# Mission Orchestrator: Technical Design
+# Mission Orchestrator: Technical Design Reference
+
+The full design, with tables and measurements. [DESIGN.md](DESIGN.md) is the short version for review.
 
 ## 1. Architecture
 
@@ -29,7 +31,9 @@ Operator UI ──HTTP/SSE──▶ API ──▶ Planning harness ──▶ LLM
 
 **Where AI reasoning ends.** The model turns a free-text work order into a candidate plan: which inspections, in what order, under which conditions, and which repair procedure. It never picks a robot, never sees a command channel, and cannot express approval: the plan schema has no approval or robot fields, and unknown fields are rejected. Everything after validation is deterministic: dependency evaluation, condition checks, routing, policy, approval enforcement, timeouts, and retry decisions.
 
-**Plan validation** runs on every model output and every operator edit: strict schema; known actions, arguments, and values; a single mission target; known dependencies; no cycles; conditions only on dependencies and only on findings that action can report; at least one inspection; every repair depends on an inspection, is conditioned on `defect_detected`, and is followed by `verify_repair`. A capability check rejects actions no robot in the fleet can perform. Validation errors go back to the model verbatim; after three failed outputs, planning fails visibly. A failed model call is never replaced by the fixture plan.
+**Operator constraints.** The work order comes with two explicit intake fields: the target asset and whether repairs are allowed. They are form fields, not parsed from the text, so checking them is deterministic. When the text and the fields disagree, the fields win; the model is told the constraints and asked to say so in its summary. The fixture planner, which does not read the text, declines any order whose fields do not fit its single plan (T-101, repairs allowed).
+
+**Plan validation** runs on every model output and every operator edit, and again at start: the operator's target and repair constraint; strict schema; known actions, arguments, and values; a single mission target; known dependencies; no cycles; conditions only on dependencies and only on findings that action can report; at least one inspection; every repair depends on an inspection, is conditioned on `defect_detected`, and is followed by `verify_repair`. A capability check rejects actions no robot in the fleet can perform. Validation errors go back to the model verbatim; after three failed outputs, planning fails visibly. A failed model call is never replaced by the fixture plan.
 
 ## 2. Execution model
 
@@ -96,13 +100,13 @@ Domain rules back this up: an approval is used by exactly one dispatch, and appr
 
 Tests run six reader threads against a live 35-robot, 15-mission run. They also check that the engine refuses a foreign thread and that a second process is refused. Each protection was disabled in turn to confirm its test fails. The torn-read check is timing-dependent: without snapshot reads it failed in 2 of 3 runs.
 
-**Restart.** On startup, every attempt still open is marked `lost`. Retry-safe tasks are redispatched; others go to `needs_intervention`. Approval waits survive unchanged, because they are only rows.
+**Restart.** On startup, every attempt still open is marked `lost`. Retry-safe tasks are redispatched; others go to `needs_intervention`. Approval waits survive unchanged, because they are only rows. The simulated world also survives: tank state is saved to a file next to the database, so a tank repaired before a restart is still repaired when verification runs after it. Deleting the database resets both.
 
 ### Fleet coordination
 
 Every robot belongs to a declared robot type, and the type defines its capabilities. The fleet is loaded from `config/fleet.json` at startup and rejected with every problem listed if a robot has a missing or unknown type, an ID is duplicated, or a type declares no capabilities. Each attempt records the robot type at dispatch time, so history keeps it even if the fleet file changes later.
 
-Routing filters by capability (via the robot's type), then availability (online, healthy, unreserved), then preference rank. The reason for passing over robots is recorded and shown: per robot in small fleets, counted per type in large ones (for example "Inspection quadruped: 300 offline"). A reservation is held for the lifetime of an attempt. With no eligible robot, the task waits with an explicit reason and resumes when a robot becomes available. Every dispatch passes an explicit policy check (capability, availability, known target, approval) whose result is written to the timeline.
+Routing filters by capability (via the robot's type), then availability (online, healthy, unreserved), then preference rank. The reason for passing over robots is recorded and shown: per robot in small fleets, counted per type in large ones (for example "Inspection quadruped: 300 offline"). A reservation is held for the lifetime of an attempt. With no eligible robot, the task waits with an explicit reason and resumes when a robot becomes available. Every dispatch passes an explicit policy check (capability, availability, operator target, repairs allowed, approval) whose result is written to the timeline. A failed check cannot clear by itself, so it puts the task in `needs_intervention` with the failed rules named; validation should make this unreachable.
 
 ### Robot liveness
 
@@ -136,7 +140,7 @@ The ceiling is the single process with one lock and SQLite: every event is handl
 
 | Boundary | Contract |
 | --- | --- |
-| Enterprise intake → orchestration | Work order: free text plus optional asset ID, priority, requester, and external ticket reference. Orchestration returns a mission ID and status callbacks. |
+| Enterprise intake → orchestration | Work order: free text plus the target asset and whether repairs are allowed (both enforced), and optionally priority, requester, and external ticket reference. Orchestration returns a mission ID and status callbacks. |
 | Planning service ↔ orchestration | Input: work order, bounded site context, capability catalog. Output: a plan document in the schema above. The planner is advisory and replaceable; validation lives in orchestration. |
 | Orchestration ↔ governance | Approval requests keyed by mission, task, plan version, and action hash; decisions with actor and comment; the append-only audit log. |
 | Orchestration ↔ Robot Integration Layer | Commands `{command_id, robot_id, action, args}` and events `{event_id, command_id, type, payload}`, plus status queries and cancellation. Orchestration never sends motion primitives. |
@@ -148,7 +152,7 @@ The ceiling is the single process with one lock and SQLite: every event is handl
 
 ## 4. Reliability, safety, and governance toward production
 
-- **Durability and throughput:** move from one process with SQLite to Postgres with the same transactional outbox, or to a workflow engine (see section 5). Replace the global lock with per-mission and per-robot locking (row locks or a reservation table with compare-and-set), run several engine workers sharing missions, and consume robot events from a message bus. Persist robot and asset state from the integration layer instead of the simulator's memory. Robots should register through the integration layer instead of a static file, and routing should consider location, battery, and load rather than a fixed preference rank.
+- **Durability and throughput:** move from one process with SQLite to Postgres with the same transactional outbox, or to a workflow engine (see section 5). Replace the global lock with per-mission and per-robot locking (row locks or a reservation table with compare-and-set), run several engine workers sharing missions, and consume robot events from a message bus. Take asset state from the integration layer and site systems instead of the simulator's state file. Robots should register through the integration layer instead of a static file, and routing should consider location, battery, and load rather than a fixed preference rank.
 - **Idempotent commands:** command IDs already identify attempts, and the simulated robot already deduplicates by them. A real integration layer must do the same, durably, so a resend cannot repeat a physical action. Idempotency keys should expire after a retention period; the prototype keeps them forever.
 - **Unknown outcomes:** add a status query or reconciliation step before escalating; keep the rule that a non-repeatable action is never retried blindly.
 - **Stale or duplicate events:** keep the inbox and attempt-state checks; add per-robot sequence numbers to detect gaps.
@@ -191,7 +195,8 @@ First additions: a robot integration engineer (adapters, command idempotency, st
 ## 8. Known limitations and unhandled edge cases
 
 - **Concurrent missions on the same asset are not prevented.** Two missions can each request a repair of T-101. Robots are reserved, but assets are not. Production needs asset-level locks or mission de-duplication.
-- **Simulator state is in memory.** After a backend restart, the simulated tank is reset, so a mission restarted between repair and verification would report `defect_persists`. A real integration layer would report actual asset state.
+- **Constraints are two fields.** Target asset and "repairs allowed" are enforced. Other instructions in the text (for example "thermal only") rely on the model; a plan that adds a visual inspection is still valid.
+- **Simulated robot state is in memory.** Tank state survives a restart, but injected faults and offline flags do not.
 - **No automatic reconciliation.** An unknown repair outcome always goes to the operator; there is no status query step.
 - **No replanning.** Plans are frozen at start; changing course means cancelling and creating a new mission.
 - **Single process.** The engine's lock is in memory; running two backend processes against one database is unsupported.
