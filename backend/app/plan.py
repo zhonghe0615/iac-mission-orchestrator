@@ -5,6 +5,7 @@ Approval is deliberately not part of the plan: whether an action needs
 approval comes from the action catalog and is enforced by the engine.
 """
 
+from dataclasses import dataclass
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -38,6 +39,22 @@ class Plan(BaseModel):
     summary: str
     target: str
     tasks: list[PlanTask] = Field(min_length=1, max_length=MAX_TASKS)
+
+
+@dataclass(frozen=True)
+class Constraints:
+    """Operator intake fields that every plan for the mission must respect.
+
+    They are explicit form fields, not parsed from the work order text, so the
+    check is deterministic. When the text and the fields disagree, the fields win.
+    """
+
+    target: str
+    allow_repair: bool
+
+    def describe(self) -> str:
+        repairs = "allowed (only if a defect is confirmed)" if self.allow_repair else "NOT allowed"
+        return f"target asset: {self.target}; repairs and other interventions: {repairs}"
 
 
 class PlanValidationError(Exception):
@@ -98,8 +115,12 @@ def _find_cycle(tasks: dict[str, PlanTask]) -> list[str] | None:
     return None
 
 
-def validate_plan(data: Any, fleet: Fleet) -> Plan:
-    """Return a validated plan or raise PlanValidationError with every problem found."""
+def validate_plan(data: Any, fleet: Fleet, constraints: Constraints | None = None) -> Plan:
+    """Return a validated plan or raise PlanValidationError with every problem found.
+
+    With constraints, the plan must also target the operator's chosen asset and,
+    if repairs are not allowed, contain no intervention.
+    """
     try:
         plan = Plan.model_validate(data)
     except ValidationError as exc:
@@ -108,6 +129,8 @@ def validate_plan(data: Any, fleet: Fleet) -> Plan:
     errors: list[str] = []
     if plan.target not in TARGETS:
         errors.append(f"target: unknown asset '{plan.target}'; known assets: {', '.join(TARGETS)}")
+    if constraints and plan.target != constraints.target:
+        errors.append(f"target: plan targets '{plan.target}' but the operator chose '{constraints.target}'")
 
     tasks: dict[str, PlanTask] = {}
     for t in plan.tasks:
@@ -132,6 +155,8 @@ def validate_plan(data: Any, fleet: Fleet) -> Plan:
                 errors.append(f"task {t.id}: argument {name}='{value}' not in {list(allowed)}")
         if "target" in t.args and t.args["target"] != plan.target:
             errors.append(f"task {t.id}: target '{t.args['target']}' differs from mission target '{plan.target}'")
+        if constraints and not constraints.allow_repair and spec.role == "intervention":
+            errors.append(f"task {t.id}: {t.action} is not allowed; the operator did not allow repairs")
         if not fleet.capable(t.action):
             errors.append(f"task {t.id}: no robot in the fleet has capabilities {sorted(spec.required_capabilities)}")
         for dep in t.depends_on:

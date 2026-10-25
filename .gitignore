@@ -26,6 +26,7 @@ coverage/
 *.db-wal
 *.sqlite
 *.sqlite3
+*.sim.json
 *.log
 
 # Local OS files

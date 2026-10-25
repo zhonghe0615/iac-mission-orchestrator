@@ -6,8 +6,11 @@ operator (or tests); nothing here decides mission flow.
 """
 
 import asyncio
+import json
+import os
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
+from pathlib import Path
 
 from .catalog import ACTIONS, ASSETS, Fleet
 from .robots import HEARTBEAT_INTERVAL_S, Command, DispatchError, EventSink, HeartbeatSink, RobotEvent
@@ -37,10 +40,16 @@ class SimAsset:
 
 
 class SimulatedFleet:
-    def __init__(self, fleet: Fleet, time_scale: float = 1.0):
+    def __init__(self, fleet: Fleet, time_scale: float = 1.0, state_file: str | Path | None = None):
         self.time_scale = time_scale
         self.robots = {rid: SimRobot() for rid in fleet.robots}
+        # The simulated world outlives the orchestrator: a repaired tank stays repaired across
+        # a backend restart, as a real one would. Without a state file it lives in memory only.
+        self.state_file = Path(state_file) if state_file else None
         self.assets = {aid: SimAsset(defect_present=(aid == "tank-T101")) for aid in ASSETS}
+        if self.state_file and self.state_file.exists():
+            saved = json.loads(self.state_file.read_text())
+            self.assets.update({aid: SimAsset(**saved[aid]) for aid in ASSETS if aid in saved})
         self.command_log: list[Command] = []
         self._sink: EventSink | None = None
         self._heartbeat_sink: HeartbeatSink | None = None
@@ -163,6 +172,7 @@ class SimulatedFleet:
             return next(f for f in spec.findings if f != spec.defect_finding), {**clear, "image": image}
         if spec.role == "intervention":
             asset.repaired = True
+            self._save_assets()
             return spec.findings[0], {"procedure": command.args.get("procedure", "")}
         if spec.role == "verification":
             if open_defect:
@@ -211,6 +221,14 @@ class SimulatedFleet:
 
     def set_defect(self, asset_id: str, present: bool) -> None:
         self.assets[asset_id] = SimAsset(defect_present=present)
+        self._save_assets()
+
+    def _save_assets(self) -> None:
+        if self.state_file is None:
+            return
+        tmp = self.state_file.with_name(self.state_file.name + ".tmp")
+        tmp.write_text(json.dumps({aid: asdict(a) for aid, a in self.assets.items()}))
+        os.replace(tmp, self.state_file)  # atomic: a crash leaves the old or the new state
 
     def snapshot(self) -> dict:
         return {

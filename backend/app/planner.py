@@ -16,7 +16,7 @@ from typing import Protocol
 import httpx
 
 from .catalog import Fleet, site_context
-from .plan import Plan, PlanValidationError, validate_plan
+from .plan import Constraints, Plan, PlanValidationError, validate_plan
 
 MAX_RECORDED_OUTPUT = 4000
 
@@ -32,7 +32,7 @@ class Planner(Protocol):
     mode: str
     label: str
 
-    async def plan(self, work_order: str) -> PlanningOutcome: ...
+    async def plan(self, work_order: str, constraints: Constraints) -> PlanningOutcome: ...
 
 
 FIXTURE_PLAN = {
@@ -73,7 +73,10 @@ FIXTURE_PLAN = {
 
 
 class FixturePlanner:
-    """Deterministic plan for demos and tests. It does not read the work order and is not an LLM."""
+    """Deterministic plan for demos and tests. It does not read the work order and is not an LLM.
+
+    It only accepts work orders whose intake fields fit its one plan (T-101, repairs allowed).
+    """
 
     mode = "fixture"
     label = "fixture planner (deterministic, no LLM)"
@@ -81,8 +84,16 @@ class FixturePlanner:
     def __init__(self, fleet: Fleet):
         self.fleet = fleet
 
-    async def plan(self, work_order: str) -> PlanningOutcome:
-        plan = validate_plan(FIXTURE_PLAN, self.fleet)
+    async def plan(self, work_order: str, constraints: Constraints) -> PlanningOutcome:
+        if constraints != Constraints(target=FIXTURE_PLAN["target"], allow_repair=True):
+            error = (
+                f"the fixture planner only produces its {FIXTURE_PLAN['target']} inspect-and-repair plan; "
+                "use the LLM planner for other assets or for missions without repairs"
+            )
+            return PlanningOutcome(
+                plan=None, error=error, calls=[{"summary": f"Fixture planner declined: {error}", "outcome": "declined"}]
+            )
+        plan = validate_plan(FIXTURE_PLAN, self.fleet, constraints)
         return PlanningOutcome(
             plan=plan,
             calls=[{"summary": "Fixture plan returned; no model was called", "outcome": "fixture", "attempt": 1}],
@@ -119,13 +130,18 @@ Rules:
 - Include at least one inspection before any repair.
 - A repair must depend on an inspection and carry the condition {"task": <inspection id>, "finding": "defect_detected"}.
 - Every repair must be followed by a verify_repair task that depends on it.
+- Respect the operator constraints given with the work order. They are enforced: a plan for a different
+  target, or with a repair when repairs are not allowed, is rejected. If the work order text disagrees
+  with them, follow the constraints and say so in the summary.
 - Keep the plan minimal: at most 12 tasks."""
 
 
-def _user_prompt(work_order: str, fleet: Fleet) -> str:
+def _user_prompt(work_order: str, constraints: Constraints, fleet: Fleet) -> str:
     return (
         "Site context, robot types, and action catalog:\n"
         + json.dumps(site_context(fleet), indent=2)
+        + "\n\nOperator constraints (enforced):\n"
+        + constraints.describe()
         + "\n\nWork order from the operator:\n"
         + work_order.strip()
     )
@@ -180,10 +196,10 @@ class LLMPlanner:
         payload = resp.json()
         return payload["choices"][0]["message"]["content"] or "", payload.get("usage") or {}
 
-    async def plan(self, work_order: str) -> PlanningOutcome:
+    async def plan(self, work_order: str, constraints: Constraints) -> PlanningOutcome:
         messages = [
             {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": _user_prompt(work_order, self.fleet)},
+            {"role": "user", "content": _user_prompt(work_order, constraints, self.fleet)},
         ]
         calls: list[dict] = []
         errors: list[str] = []
@@ -214,7 +230,7 @@ class LLMPlanner:
                     output=content[:MAX_RECORDED_OUTPUT],
                 )
                 try:
-                    plan = validate_plan(json.loads(_extract_json(content)), self.fleet)
+                    plan = validate_plan(json.loads(_extract_json(content)), self.fleet, constraints)
                 except json.JSONDecodeError as exc:
                     errors = [f"output is not valid JSON: {exc}"]
                 except PlanValidationError as exc:

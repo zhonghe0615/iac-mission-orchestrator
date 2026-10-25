@@ -7,11 +7,14 @@ import httpx
 import pytest
 
 from app.catalog import Fleet
+from app.plan import Constraints
 from app.planner import FIXTURE_PLAN, LLMPlanner
 
-from .conftest import close_harness, make_harness
+from .conftest import T101, close_harness, make_harness
 
 pytestmark = pytest.mark.anyio
+
+T101_RULES = Constraints(**T101)
 
 
 def fake_endpoint(outputs: list, seen: list):
@@ -40,7 +43,7 @@ def planner(outputs: list, seen: list, **kwargs) -> LLMPlanner:
 
 async def test_valid_output_is_accepted_and_request_is_structured():
     seen: list = []
-    outcome = await planner([json.dumps(FIXTURE_PLAN)], seen, reasoning_effort="high").plan("Inspect T-101")
+    outcome = await planner([json.dumps(FIXTURE_PLAN)], seen, reasoning_effort="high").plan("Inspect T-101", T101_RULES)
     assert outcome.plan is not None and outcome.error is None
     request = seen[0]
     assert request["model"] == "test-model"
@@ -57,7 +60,7 @@ async def test_invalid_output_gets_bounded_correction():
     unsafe = copy.deepcopy(FIXTURE_PLAN)
     unsafe["tasks"][2].pop("condition")
     seen: list = []
-    outcome = await planner(["not json", json.dumps(unsafe), "```json\n" + json.dumps(FIXTURE_PLAN) + "\n```"], seen).plan("x")
+    outcome = await planner(["not json", json.dumps(unsafe), "```json\n" + json.dumps(FIXTURE_PLAN) + "\n```"], seen).plan("x", T101_RULES)
     assert outcome.plan is not None
     assert [c["outcome"] for c in outcome.calls] == ["invalid", "invalid", "valid"]
     # Validation errors are fed back to the model.
@@ -66,21 +69,21 @@ async def test_invalid_output_gets_bounded_correction():
 
 async def test_persistently_invalid_output_fails_without_fallback():
     seen: list = []
-    outcome = await planner(["{}", "{}", "{}"], seen).plan("x")
+    outcome = await planner(["{}", "{}", "{}"], seen).plan("x", T101_RULES)
     assert outcome.plan is None
     assert "failed validation after 3 attempts" in outcome.error
     assert len(seen) == 3
 
 
 async def test_model_call_failure_is_reported():
-    outcome = await planner([503], []).plan("x")
+    outcome = await planner([503], []).plan("x", T101_RULES)
     assert outcome.plan is None and "HTTP 503" in outcome.error
 
 
 async def test_failed_llm_planning_never_substitutes_the_fixture():
     h = await make_harness(planners={"llm": planner([503], [])})
     try:
-        mid = await h.engine.create_mission("Inspect and resolve T-101", "llm", "tester")
+        mid = await h.engine.create_mission("Inspect and resolve T-101", "llm", "tester", **T101)
         mission = h.mission(mid)
         assert mission["status"] == "planning_failed"
         assert mission["plan_version"] == 0 and h.store.plan_versions(mid) == []
@@ -98,12 +101,12 @@ async def test_unexpected_planner_error_fails_planning_visibly():
         mode = "llm"
         label = "broken planner"
 
-        async def plan(self, work_order: str):
+        async def plan(self, work_order, constraints):
             raise ImportError("socks support missing")
 
     h = await make_harness(planners={"llm": BrokenPlanner()})
     try:
-        mid = await h.engine.create_mission("Inspect and resolve T-101", "llm", "tester")
+        mid = await h.engine.create_mission("Inspect and resolve T-101", "llm", "tester", **T101)
         assert h.mission(mid)["status"] == "planning_failed"
         assert "socks support missing" in h.mission(mid)["status_reason"]
     finally:
@@ -113,7 +116,7 @@ async def test_unexpected_planner_error_fails_planning_visibly():
 async def test_llm_plan_runs_through_the_same_execution_path():
     h = await make_harness(planners={"llm": planner([json.dumps(FIXTURE_PLAN)], [])})
     try:
-        mid = await h.engine.create_mission("Inspect and resolve T-101", "llm", "tester")
+        mid = await h.engine.create_mission("Inspect and resolve T-101", "llm", "tester", **T101)
         assert h.store.plan_versions(mid)[0]["source"] == "llm"
         await h.engine.start_mission(mid, "tester")
         await h.wait_status(mid, "waiting_approval")

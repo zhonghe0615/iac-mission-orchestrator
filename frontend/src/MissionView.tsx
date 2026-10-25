@@ -76,6 +76,11 @@ export function MissionView({
             <span className="mono">{m.id}</span> <Pill value={m.status} />
           </h2>
           <p className="work-order">{m.work_order}</p>
+          {m.target && (
+            <p className="hint">
+              Target <span className="mono">{m.target}</span> · repairs {m.allow_repair ? "allowed" : "not allowed"}
+            </p>
+          )}
         </div>
         <div className="mission-actions">
           {PRE_START.includes(m.status) && m.plan_version > 0 && (
@@ -229,7 +234,7 @@ function InterventionCard({
 function PlanReview({ detail, operator, onChange }: { detail: MissionDetail; operator: string; onChange: () => void }) {
   const plan = detail.current_plan?.plan;
   const [editing, setEditing] = useState(!plan);
-  const [text, setText] = useState(() => JSON.stringify(plan ?? { summary: "", target: "tank-T101", tasks: [] }, null, 2));
+  const [text, setText] = useState(() => JSON.stringify(plan ?? { summary: "", target: detail.mission.target, tasks: [] }, null, 2));
   const action = useAction();
 
   const save = () =>

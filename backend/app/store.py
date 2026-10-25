@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS missions (
     id TEXT PRIMARY KEY,
     work_order TEXT NOT NULL,
     target TEXT,
+    allow_repair INTEGER NOT NULL DEFAULT 1,
     status TEXT NOT NULL,
     status_reason TEXT NOT NULL DEFAULT '',
     planner_mode TEXT NOT NULL,
@@ -152,6 +153,7 @@ class Store:
                 self.conn.execute("PRAGMA locking_mode=EXCLUSIVE")
             self.conn.execute("PRAGMA journal_mode=WAL")
             self.conn.executescript(SCHEMA)
+            self._migrate()
         except sqlite3.OperationalError as exc:
             self.conn.close()
             if "locked" in str(exc):
@@ -160,6 +162,12 @@ class Store:
                     "stop it first or set DATABASE_PATH to a different file"
                 ) from None
             raise
+
+    def _migrate(self) -> None:
+        # Databases created before missions recorded the operator's repair constraint.
+        columns = {row["name"] for row in self.conn.execute("PRAGMA table_info(missions)")}
+        if "allow_repair" not in columns:
+            self.conn.execute("ALTER TABLE missions ADD COLUMN allow_repair INTEGER NOT NULL DEFAULT 1")
 
     def close(self) -> None:
         with self._lock:

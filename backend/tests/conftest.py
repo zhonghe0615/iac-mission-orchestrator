@@ -7,6 +7,7 @@ import pytest
 
 from app.catalog import Fleet
 from app.engine import Engine
+from app.main import sim_state_file
 from app.planner import FixturePlanner
 from app.simulator import SimulatedFleet
 from app.store import Store
@@ -14,6 +15,8 @@ from app.store import Store
 # Simulated durations and timeouts run at 1/100 of real time in tests.
 TIME_SCALE = 0.01
 BACKEND_DIR = Path(__file__).resolve().parent.parent
+# Intake fields for the standard mission: the fixture plan's asset, repairs allowed.
+T101 = {"target": "tank-T101", "allow_repair": True}
 
 
 @dataclass
@@ -57,7 +60,9 @@ class Harness:
         )
 
     async def started_mission(self) -> str:
-        mission_id = await self.engine.create_mission("Inspect and resolve the suspected leak on tank T-101", "fixture", "tester")
+        mission_id = await self.engine.create_mission(
+            "Inspect and resolve the suspected leak on tank T-101", "fixture", "tester", **T101
+        )
         await self.engine.start_mission(mission_id, "tester")
         return mission_id
 
@@ -71,7 +76,7 @@ async def make_harness(
 ) -> Harness:
     fleet = fleet or Fleet.load()
     store = Store(db_path)
-    sim = SimulatedFleet(fleet, time_scale=time_scale)
+    sim = SimulatedFleet(fleet, time_scale=time_scale, state_file=sim_state_file(db_path))
     extra = {} if lease_s is None else {"heartbeat_lease_s": lease_s}
     engine = Engine(store, sim, fleet, planners or {"fixture": FixturePlanner(fleet)}, time_scale=time_scale, **extra)
     sim.attach(engine.enqueue, heartbeat=engine.heartbeat)

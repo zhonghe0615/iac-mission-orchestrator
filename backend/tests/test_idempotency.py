@@ -12,9 +12,10 @@ from app.main import create_app
 from app.planner import FIXTURE_PLAN, LLMPlanner
 from app.store import Store
 
+from .conftest import T101
 from .test_api import settings, wait_for_status
 
-WORK_ORDER = {"work_order": "Inspect and resolve the leak on T-101", "planner": "fixture"}
+WORK_ORDER = {"work_order": "Inspect and resolve the leak on T-101", **T101, "planner": "fixture"}
 
 
 def test_repeated_create_returns_the_original_mission(tmp_path):
@@ -90,7 +91,7 @@ async def test_concurrent_duplicate_is_executed_once(tmp_path):
         fleet=fleet, base_url="https://llm.invalid/v1", api_key="k", model="m", transport=httpx.MockTransport(slow_handler)
     )
     app = create_app(settings(tmp_path), planners={"llm": planner})
-    body = {"work_order": "Inspect and resolve the leak on T-101", "planner": "llm"}
+    body = {**WORK_ORDER, "planner": "llm"}
     async with app.router.lifespan_context(app):
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:

@@ -102,6 +102,7 @@ export default function App() {
         <aside className="sidebar">
           <NewMissionForm
             config={config}
+            site={site}
             operator={operator}
             onCreated={(d) => {
               // Update the ref first: refresh() reads it before React re-renders.

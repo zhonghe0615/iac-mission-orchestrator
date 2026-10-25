@@ -28,6 +28,9 @@ Actor = Field(default="operator", min_length=1, max_length=64)
 
 class CreateMission(BaseModel):
     work_order: str = Field(min_length=5, max_length=4000)
+    # Explicit intake fields: every plan for the mission is checked against them.
+    target: str
+    allow_repair: bool
     planner: str = "llm"
     actor: str = Actor
 
@@ -58,6 +61,11 @@ class AssetScenario(BaseModel):
     defect_present: bool
 
 
+def sim_state_file(database_path: str) -> Path | None:
+    """Simulated asset state is saved next to the database, so both survive a restart together."""
+    return None if database_path == ":memory:" else Path(database_path).with_suffix(".sim.json")
+
+
 def build_planners(settings: Settings, fleet: Fleet) -> dict[str, Planner]:
     planners: dict[str, Planner] = {"fixture": FixturePlanner(fleet)}
     if settings.llm_configured:
@@ -79,10 +87,14 @@ def create_app(settings: Settings | None = None, planners: dict[str, Planner] | 
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        if settings.database_path != ":memory:":
+        state_file = sim_state_file(settings.database_path)
+        if state_file:
             Path(settings.database_path).parent.mkdir(parents=True, exist_ok=True)
+            if not Path(settings.database_path).exists():
+                # A new database starts a new simulated world: deleting the database resets everything.
+                state_file.unlink(missing_ok=True)
         store = Store(settings.database_path)
-        sim = SimulatedFleet(fleet, time_scale=settings.sim_time_scale)
+        sim = SimulatedFleet(fleet, time_scale=settings.sim_time_scale, state_file=state_file)
         engine = Engine(
             store,
             sim,
@@ -195,7 +207,9 @@ def create_app(settings: Settings | None = None, planners: dict[str, Planner] | 
 
         async def run() -> dict:
             # Returns at once with status "planning"; the stream announces when the plan is ready.
-            mission_id = await engine.submit_mission(body.work_order, body.planner, body.actor)
+            mission_id = await engine.submit_mission(
+                body.work_order, body.planner, body.actor, target=body.target, allow_repair=body.allow_repair
+            )
             return engine.mission_detail(mission_id)
 
         return await idempotent(request, body, run, code=201)

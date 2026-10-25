@@ -30,7 +30,7 @@ from dataclasses import dataclass
 from typing import Any, Callable
 
 from .catalog import ACTIONS, ASSETS, Fleet
-from .plan import Plan, validate_plan
+from .plan import Constraints, Plan, validate_plan
 from .planner import Planner, PlanningOutcome
 from .robots import HEARTBEAT_INTERVAL_S, HEARTBEAT_LEASE_S, Command, DispatchError, RobotEvent, RobotPort
 from .store import Store, new_id
@@ -52,6 +52,10 @@ class EngineError(Exception):
 
 class NotFound(EngineError):
     status_code = 404
+
+
+class InvalidRequest(EngineError):
+    status_code = 422
 
 
 def action_hash(action: str, args: dict) -> str:
@@ -224,24 +228,32 @@ class Engine:
 
     # Operator commands
 
-    async def create_mission(self, work_order: str, planner_mode: str, actor: str) -> str:
+    async def create_mission(
+        self, work_order: str, planner_mode: str, actor: str, *, target: str, allow_repair: bool
+    ) -> str:
         """Create a mission and wait for its plan."""
-        mission_id = await self._record_mission(work_order, planner_mode, actor)
-        await self._plan_mission(mission_id, work_order, planner_mode)
+        constraints = Constraints(target=target, allow_repair=allow_repair)
+        mission_id = await self._record_mission(work_order, planner_mode, actor, constraints)
+        await self._plan_mission(mission_id, work_order, planner_mode, constraints)
         return mission_id
 
-    async def submit_mission(self, work_order: str, planner_mode: str, actor: str) -> str:
+    async def submit_mission(
+        self, work_order: str, planner_mode: str, actor: str, *, target: str, allow_repair: bool
+    ) -> str:
         """Create a mission and plan it in the background; the mission starts in "planning"."""
-        mission_id = await self._record_mission(work_order, planner_mode, actor)
-        task = asyncio.create_task(self._plan_mission(mission_id, work_order, planner_mode))
+        constraints = Constraints(target=target, allow_repair=allow_repair)
+        mission_id = await self._record_mission(work_order, planner_mode, actor, constraints)
+        task = asyncio.create_task(self._plan_mission(mission_id, work_order, planner_mode, constraints))
         self._background.add(task)
         task.add_done_callback(self._background.discard)
         return mission_id
 
-    async def _record_mission(self, work_order: str, planner_mode: str, actor: str) -> str:
+    async def _record_mission(self, work_order: str, planner_mode: str, actor: str, constraints: Constraints) -> str:
         planner = self.planners.get(planner_mode)
         if planner is None:
             raise EngineError(f"planner mode '{planner_mode}' is not configured; available: {sorted(self.planners)}")
+        if constraints.target not in ASSETS:
+            raise InvalidRequest(f"unknown target asset '{constraints.target}'; known assets: {', '.join(ASSETS)}")
         mission_id = new_id("M")
 
         def create() -> None:
@@ -250,23 +262,33 @@ class Engine:
                 {
                     "id": mission_id,
                     "work_order": work_order,
-                    "target": None,
+                    "target": constraints.target,
+                    "allow_repair": int(constraints.allow_repair),
                     "status": "planning",
                     "planner_mode": planner_mode,
                     "created_at": now,
                     "updated_at": now,
                 }
             )
-            self._event(mission_id, "mission_created", f"Work order submitted by {actor}", work_order=work_order)
+            self._event(
+                mission_id,
+                "mission_created",
+                f"Work order submitted by {actor} ({constraints.describe()})",
+                work_order=work_order,
+                target=constraints.target,
+                allow_repair=constraints.allow_repair,
+            )
             self._event(mission_id, "planning_started", f"Planning with {planner.label}", planner_mode=planner_mode)
 
         await self._locked(create)
         return mission_id
 
-    async def _plan_mission(self, mission_id: str, work_order: str, planner_mode: str) -> None:
+    async def _plan_mission(
+        self, mission_id: str, work_order: str, planner_mode: str, constraints: Constraints
+    ) -> None:
         planner = self.planners[planner_mode]
         try:
-            outcome = await planner.plan(work_order)
+            outcome = await planner.plan(work_order, constraints)
         except Exception as exc:
             # A planner bug must not leave the mission stuck in "planning".
             log.exception("planner %s failed", planner_mode)
@@ -289,7 +311,6 @@ class Engine:
                 status="ready",
                 status_reason="Plan validated; review it and start the mission",
                 plan_version=version,
-                target=outcome.plan.target,
             )
             self._event(mission_id, "plan_validated", f"Plan v{version} produced by {planner.label} passed validation")
 
@@ -300,14 +321,13 @@ class Engine:
             mission = self._mission(mission_id)
             if mission["status"] not in PRE_START:
                 raise EngineError(f"plan can only be edited before start (mission is {mission['status']})")
-            plan = validate_plan(plan_data, self.fleet)
+            plan = validate_plan(plan_data, self.fleet, self._constraints(mission))
             version = self.store.add_plan_version(mission_id, plan.model_dump(), "operator", actor)
             self.store.update_mission(
                 mission_id,
                 status="ready",
                 status_reason="Edited plan validated; review it and start the mission",
                 plan_version=version,
-                target=plan.target,
             )
             self._event(mission_id, "plan_edited", f"Plan v{version} edited by {actor} and validated")
             return version
@@ -320,7 +340,7 @@ class Engine:
             if mission["status"] != "ready":
                 raise EngineError(f"mission cannot start from status {mission['status']}")
             version = mission["plan_version"]
-            plan = validate_plan(self.store.plan_version(mission_id, version)["plan"], self.fleet)
+            plan = validate_plan(self.store.plan_version(mission_id, version)["plan"], self.fleet, self._constraints(mission))
             self._create_tasks(mission_id, version, plan)
             self.store.update_mission(mission_id, status="running", status_reason="")
             self._event(mission_id, "mission_started", f"Mission started by {actor} with plan v{version}")
@@ -796,11 +816,19 @@ class Engine:
                 "detail": f"{self.fleet.name(robot_id)} online, healthy, unreserved",
             },
             {
-                "rule": "known_target",
-                "passed": task["args"].get("target") in ASSETS,
-                "detail": f"target {task['args'].get('target')}",
+                "rule": "operator_target",
+                "passed": task["args"].get("target") == mission["target"],
+                "detail": f"target {task['args'].get('target')}, operator chose {mission['target']}",
             },
         ]
+        if spec.role == "intervention":
+            checks.append(
+                {
+                    "rule": "repairs_allowed",
+                    "passed": bool(mission["allow_repair"]),
+                    "detail": "operator allowed repairs" if mission["allow_repair"] else "operator did not allow repairs",
+                }
+            )
         if spec.requires_approval:
             approval = self._approval_for(mission, task)
             checks.append(
@@ -839,8 +867,12 @@ class Engine:
             checks=checks,
         )
         if not allowed:
-            # Defensive: routing and approval checks above should prevent this.
-            self.store.update_task(mission_id, task_id, status="waiting_resource", status_reason="Blocked by policy")
+            # Defensive: routing, validation, and approval checks above should prevent this.
+            # A policy block does not clear by itself, so the operator decides.
+            failed = ", ".join(c["rule"] for c in checks if not c["passed"])
+            self.store.update_task(
+                mission_id, task_id, status="needs_intervention", status_reason=f"Blocked by policy ({failed})"
+            )
             return True
 
         attempt_no = task["attempt_count"] + 1
@@ -969,6 +1001,10 @@ class Engine:
         if mission is None:
             raise NotFound(f"mission {mission_id} not found")
         return mission
+
+    @staticmethod
+    def _constraints(mission: dict) -> Constraints:
+        return Constraints(target=mission["target"], allow_repair=bool(mission["allow_repair"]))
 
     def _task(self, mission_id: str, task_id: str) -> dict:
         task = self.store.task(mission_id, task_id)

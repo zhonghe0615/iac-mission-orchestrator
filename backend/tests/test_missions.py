@@ -6,6 +6,8 @@ from app.engine import EngineError
 from app.plan import PlanValidationError
 from app.planner import FIXTURE_PLAN
 
+from .conftest import T101
+
 pytestmark = pytest.mark.anyio
 
 
@@ -142,7 +144,7 @@ async def test_api_requests_cannot_bypass_approval(h):
 
 
 async def test_edited_plan_is_revalidated_before_start(h):
-    mid = await h.engine.create_mission("Inspect T-101", "fixture", "tester")
+    mid = await h.engine.create_mission("Inspect T-101", "fixture", "tester", **T101)
     unsafe = {**FIXTURE_PLAN, "tasks": [t for t in FIXTURE_PLAN["tasks"] if t["id"] != "t4"]}
     with pytest.raises(PlanValidationError) as exc:
         await h.engine.update_plan(mid, unsafe, "tester")
@@ -195,7 +197,7 @@ async def test_independent_inspections_run_in_parallel_on_a_and_b(h):
     # Thermal (t1) and visual (t2) have no dependency on each other; the repair waits for both.
     parallel = {**FIXTURE_PLAN, "tasks": [dict(t) for t in FIXTURE_PLAN["tasks"]]}
     parallel["tasks"][1]["depends_on"] = []
-    mid = await h.engine.create_mission("Inspect and resolve the suspected leak on tank T-101", "fixture", "tester")
+    mid = await h.engine.create_mission("Inspect and resolve the suspected leak on tank T-101", "fixture", "tester", **T101)
     await h.engine.update_plan(mid, parallel, "tester")
     await h.engine.start_mission(mid, "tester")
 

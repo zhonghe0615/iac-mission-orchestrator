@@ -17,6 +17,7 @@ export interface Mission {
   id: string;
   work_order: string;
   target: string | null;
+  allow_repair: number;
   status: MissionStatus;
   status_reason: string;
   planner_mode: string;
@@ -158,6 +159,7 @@ export interface Config {
 export type Metrics = Record<string, unknown>;
 
 export interface SiteContext {
+  assets: { id: string; name: string; description: string }[];
   actions: { name: string; role: string; requires_approval: boolean }[];
 }
 
@@ -222,8 +224,8 @@ export const api = {
   missions: () => request<Mission[]>("GET", "/api/missions"),
   mission: (id: string) => request<MissionDetail>("GET", `/api/missions/${id}`),
   metrics: () => request<Metrics>("GET", "/api/metrics"),
-  createMission: (work_order: string, planner: string, actor: string) =>
-    request<MissionDetail>("POST", "/api/missions", { work_order, planner, actor }),
+  createMission: (work_order: string, target: string, allow_repair: boolean, planner: string, actor: string) =>
+    request<MissionDetail>("POST", "/api/missions", { work_order, target, allow_repair, planner, actor }),
   editPlan: (id: string, plan: unknown, actor: string) =>
     request<MissionDetail>("PUT", `/api/missions/${id}/plan`, { plan, actor }),
   start: (id: string, actor: string) => request<MissionDetail>("POST", `/api/missions/${id}/start`, { actor }),

@@ -8,7 +8,7 @@ from app.catalog import DEFAULT_FLEET_FILE
 from app.config import Settings
 from app.main import create_app
 
-from .conftest import TIME_SCALE
+from .conftest import T101, TIME_SCALE
 
 
 def settings(tmp_path) -> Settings:
@@ -39,10 +39,10 @@ def test_operator_flow_over_http(tmp_path):
         config = client.get("/api/config").json()
         # Without credentials only the labelled fixture planner is offered.
         assert config["planners"] == [{"mode": "fixture", "label": "fixture planner (deterministic, no LLM)"}]
-        assert client.post("/api/missions", json={"work_order": "Inspect T-101", "planner": "llm"}).status_code == 409
+        assert client.post("/api/missions", json={"work_order": "Inspect T-101", **T101, "planner": "llm"}).status_code == 409
 
         created = client.post(
-            "/api/missions", json={"work_order": "Inspect and resolve the leak on T-101", "planner": "fixture"}
+            "/api/missions", json={"work_order": "Inspect and resolve the leak on T-101", **T101, "planner": "fixture"}
         )
         assert created.status_code == 201
         mid = created.json()["mission"]["id"]

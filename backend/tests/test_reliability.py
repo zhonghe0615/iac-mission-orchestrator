@@ -1,10 +1,15 @@
 """Bonus reliability behavior: duplicate/out-of-order events, restart recovery, metrics."""
 
-import pytest
+from pathlib import Path
 
+import pytest
+from fastapi.testclient import TestClient
+
+from app.main import create_app
 from app.metrics import compute_metrics
 
 from .conftest import close_harness, make_harness
+from .test_api import settings
 
 pytestmark = pytest.mark.anyio
 
@@ -77,6 +82,43 @@ async def test_restart_with_open_repair_requires_intervention(tmp_path):
         assert second.task(mid, "t3")["status"] == "needs_intervention"
     finally:
         await close_harness(second)
+
+
+async def test_restart_between_repair_and_verification_resolves(tmp_path):
+    db = str(tmp_path / "orchestrator.db")
+    first = await make_harness(db)
+    mid = await first.started_mission()
+    await first.wait_status(mid, "waiting_approval")
+    for scout in ("scout-a", "scout-b"):
+        first.sim.arm_fault(scout, "hang_next")  # verification will not finish before the restart
+    await first.engine.decide_approval(mid, "t3", "approve", "tester", "")
+    await first.wait_task(mid, "t3", "succeeded")
+    await first.wait(lambda: first.commands("verify_repair"), what="verification dispatch")
+    await close_harness(first)
+
+    # The simulated tank keeps its repaired state, so verification after restart reflects the repair.
+    second = await make_harness(db)
+    try:
+        assert second.sim.assets["tank-T101"].repaired
+        await second.wait_status(mid, "resolved")
+        attempts = second.store.task_attempts(mid, "t4")
+        assert [a["status"] for a in attempts] == ["lost", "succeeded"]
+        assert second.task(mid, "t4")["finding"] == "repair_verified"
+        assert second.commands("repair") == []
+    finally:
+        await close_harness(second)
+
+
+def test_simulated_tank_state_survives_restart_but_not_a_new_database(tmp_path):
+    s = settings(tmp_path)
+    with TestClient(create_app(s)) as client:
+        client.post("/api/sim/assets/tank-T101", json={"defect_present": False})
+    with TestClient(create_app(s)) as client:
+        assert client.get("/api/robots").json()["simulator"]["assets"]["tank-T101"]["defect_present"] is False
+
+    Path(s.database_path).unlink()
+    with TestClient(create_app(s)) as client:
+        assert client.get("/api/robots").json()["simulator"]["assets"]["tank-T101"]["defect_present"] is True
 
 
 async def test_restart_during_planning_fails_visibly(tmp_path):
