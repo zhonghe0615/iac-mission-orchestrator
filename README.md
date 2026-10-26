@@ -4,6 +4,10 @@ A working prototype of an orchestration layer that plans, executes, and recovers
 
 An LLM proposes a structured mission plan. Deterministic backend code validates it, routes tasks by capability and availability, enforces human approval before the repair, and handles failures, timeouts, and late or duplicate events without losing mission history.
 
+The 3:48 assessment video is a separate delivery artifact, kept outside this repository. It has English captions and shows real LLM planning, failure recovery, approved simulated repair, and a separate rejection outcome. The robots and tank are simulated.
+
+For the assessment, start with the [short technical design](docs/DESIGN_SUBMISSION.md) and [requirement verification](docs/VERIFICATION.md).
+
 ## New here? Take the guided tour
 
 Open this folder in a coding agent and start the **`iac-tour`** skill:
@@ -58,7 +62,7 @@ The database is created at `backend/data/orchestrator.db`, with the simulated ta
 Without credentials, only the deterministic **fixture planner** is offered, and it is labelled as not being an LLM everywhere it appears. To use a real model:
 
 ```bash
-cp backend/.env.example backend/.env    # Windows: copy backend\.env.example backend\.env
+cp .env.example .env    # Windows: copy .env.example .env
 ```
 
 Set `LLM_API_KEY` and `LLM_MODEL`, and `LLM_BASE_URL` if you are not using the OpenAI endpoint. Any OpenAI-compatible Chat Completions API works:
@@ -151,8 +155,9 @@ backend/
   tests/
 frontend/            React + TypeScript console (built output committed in dist/)
 docs/
-  DESIGN.md          technical design for review (about 4 pages)
-  DESIGN_REFERENCE.md  full design: transition table, idempotency, concurrency, scaling
+  DESIGN_SUBMISSION.md  short technical design for assessment review
+  DESIGN.md          full design discussion and evaluation-criteria table
+  DESIGN_REFERENCE.md  transition table, idempotency, concurrency, scaling
   DEMO.md            walkthrough script
   VERIFICATION.md    status of every requirement, with evidence
   AI_USAGE.md        AI tool usage

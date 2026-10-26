@@ -13,7 +13,7 @@ I used AI coding agents throughout development. Below is a summary of their cont
 
 ## What the AI accelerated
 
-Implementation, test suites, UI styling, documentation drafts, and repetitive verification (repeat test runs, mutation checks that disable a guard to confirm its test fails, browser walkthroughs, and fresh-clone install checks). The agents also recorded and edited the demo video following my demonstration plan. Work all above would have taken days took one long session.
+Implementation, test suites, UI styling, documentation drafts, and repetitive verification (repeat test runs, mutation checks that disable a guard to confirm its test fails, browser walkthroughs, and fresh-clone install checks). The agents also recorded and edited the demo video following my demonstration plan. That work would otherwise have taken days.
 
 ## Decisions I made
 

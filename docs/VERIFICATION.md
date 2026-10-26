@@ -1,6 +1,6 @@
 # Requirement Verification
 
-Status of each assessment requirement as of 2026-10-25.
+Status of each assessment requirement as of 2026-10-26.
 
 - **Verified:** reproduced, with the evidence named.
 - **Incomplete:** not done yet.
@@ -8,10 +8,24 @@ Status of each assessment requirement as of 2026-10-25.
 
 Test names refer to `backend/tests/`. "Browser run" means headless Chrome driving the built UI against the real backend, with screenshots checked by hand.
 
+## Design response coverage
+
+The [short submission design](DESIGN_SUBMISSION.md) answers the six written prompts; [DESIGN.md](DESIGN.md) retains the detailed tradeoffs and production plan. Proposed production controls are described as proposals, not counted as implemented features.
+
+| PDF prompt | Submission section | Prototype evidence or boundary |
+| --- | --- | --- |
+| 1. Architecture and AI-assisted implementation | §1 | Planner, validator, state machine, simulated adapter, policy, approval, and tests. Robot reservations exist; asset/work-zone reservations remain future work. |
+| 2. Fit into IAC | §2 | Enterprise, planning, governance, robot, and UI contracts; fleet config shows type reuse. Real OEM adapters and configurable asset/action catalogs remain future work. |
+| 3. Reliability, safety, governance | §3 | Persistence, retry and unknown-outcome rules, audit, and invalid-plan handling are tested. Authentication and physical safety are production proposals. |
+| 4. Build versus buy | §4 | Compares mission semantics with Temporal, model hosting, OEM/robot-ops platforms, and facility systems using cost, integration, reliability, control, and exit criteria. |
+| 5. First 90 days | §5 | First workflows, common models, rollout gates, dependencies, metrics, cloud foundation, RBAC, and operator feedback analysis are proposed milestones. |
+| 6. Team and customer execution | §6 | First roles, sales/solutions handoff, acceptance criteria, and path from customer request to reusable platform primitive. |
+
 ## Required mission
 
 | Requirement | Status | Evidence |
 | --- | --- | --- |
+| Fleet matches the specified robot capabilities | Verified | `backend/config/fleet.json`: Scouts A and B have navigation, camera, and thermal inspection; Manipulator C has navigation, camera inspection, and simulated repair capability. |
 | Operator submits a plain-English work order | Verified | Browser run; `test_operator_flow_over_http` |
 | A real LLM produces a structured, capability-aware plan | Verified | Two recorded `gpt-6-luna` runs (below), both valid on the first call |
 | Plan respects the operator's target asset and repair permission | Verified | Enforced by validation for model, fixture, and edited plans, and again by the dispatch policy (`test_constraints.py`; each check was disabled in turn and its test failed); browser run (fixture planner declines a T-102 survey); real runs below |
@@ -37,9 +51,9 @@ Test names refer to `backend/tests/`. "Browser run" means headless Chrome drivin
 
 | Artifact | Status | Evidence |
 | --- | --- | --- |
-| Technical design (about 2–4 pages) | Verified | `docs/DESIGN.md`, about 1,800 words (roughly 4 pages), answers the key question of each of the six assessment topics; full detail in `docs/DESIGN_REFERENCE.md` |
+| Technical design (about 2–4 pages) | Verified | `docs/DESIGN_SUBMISSION.md`, about 1,800 words, answers all six assessment topics; full discussion in `docs/DESIGN.md` and implementation detail in `docs/DESIGN_REFERENCE.md` |
 | README with setup, launch, simulated versus implemented | Verified | Followed from a fresh GitHub clone with pip on Python 3.10 |
-| Demo video or live walkthrough | Incomplete | Script ready in `docs/DEMO.md`; recording or walkthrough is the author's step |
+| Demo video or live walkthrough | Recorded locally; deliver separately | 3:48 captioned video recorded on 2026-10-25 and retained outside the repository. Shows two real-model plans, Scout A failure and reassignment to Scout B, approved simulated repair and verification, and a separate rejection with no repair dispatch. The edit removes idle pauses; the underlying mission records were checked independently. |
 | AI tool usage disclosure | Verified | `docs/AI_USAGE.md`: tools used at each stage, decisions made by the author, accepted proposals, and how the work was checked; reviewed by the author |
 
 ## Bonuses
