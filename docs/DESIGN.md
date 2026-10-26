@@ -1,6 +1,6 @@
 # Mission Orchestrator: Technical Design
 
-This is the short version for review. [DESIGN_REFERENCE.md](DESIGN_REFERENCE.md) has the full state transition table, idempotency and concurrency details, liveness tuning, and scaling measurements. Sections 1–6 follow the six topics of the assessment brief.
+This is the full design discussion. [DESIGN_SUBMISSION.md](DESIGN_SUBMISSION.md) is the short document for assessment review; [DESIGN_REFERENCE.md](DESIGN_REFERENCE.md) has the state transition table, idempotency and concurrency details, liveness tuning, and scaling measurements. Sections 1–6 follow the six topics of the assessment brief.
 
 ## 1. System design
 
@@ -18,7 +18,7 @@ One FastAPI process with internal modules, a React console, and SQLite. Robots a
 
 **Where AI reasoning ends.** The model turns free text into a candidate plan: which inspections, in what order, under which conditions, and which repair procedure. Everything after that is deterministic code: validation, dependency and condition evaluation, robot routing, policy, approval, timeouts, and retries. The plan schema has no robot or approval fields and rejects unknown fields, so the model cannot choose a robot, issue a command, or approve anything.
 
-**Agentic planning.** The planner sends a bounded context: assets, robot types with capabilities and counts (not individual robots), and the action catalog with arguments, findings, and risk. The operator also sets two intake fields, the target asset and whether repairs are allowed. These are enforced, not inferred from the text. Every plan, whether from the model or edited by the operator, passes the same validator, and the validator runs again at start:
+**Agentic planning.** The planner sends a bounded context: assets, robot types with capabilities and counts (not individual robots), and the action catalog with arguments, findings, and risk. The catalog defines the actions available to the planner; the model cannot call robot or OEM tools directly. The operator also sets two intake fields, the target asset and whether repairs are allowed. These are enforced, not inferred from the text. Every plan, whether from the model or edited by the operator, passes the same validator, and the validator runs again at start:
 - the plan targets the operator's asset and contains no repair unless repairs are allowed;
 - it uses known actions and argument values, with no cycles;
 - conditions depend only on findings their dependency actually reports;
@@ -56,7 +56,7 @@ Each command and event is handled in one SQLite transaction together with its au
 
 **Shared** across robot types: capability names, the action catalog, mission/task/attempt state, evidence, and events. **Robot- or OEM-specific:** how an action is executed, sensor formats, local safety, and fleet-manager scheduling.
 
-**Staying generic.** A new robot brand adds an adapter and declares capabilities. A new site adds assets. A new mission type adds catalog actions with a role (inspection, intervention, verification). The validator's safety rules and the outcome rules read roles, not action names, so the engine, routing, approval, and audit code do not change. In tests, a robot type unknown to any code took over inspection work through configuration alone, and the engine ran 40 concurrent missions on 520 robots with no double-booking.
+**Staying generic.** A new robot brand adds an adapter and declares capabilities. A new site supplies asset mappings and site policy; a new mission type first composes existing actions, then adds catalog actions where needed. The validator's current safety rules and outcome rules read action roles (inspection, intervention, verification), so existing execution semantics can reuse the engine, routing, approval, and audit code. New coordination or safety semantics require reviewed core changes. In this prototype, fleet types are configurable, while assets and actions are Python definitions and only the simulator implements the robot interface. In tests, a robot type unknown to any code took over inspection work through configuration alone, and the engine ran 40 concurrent missions on 520 robots with no double-booking.
 
 ## 3. Reliability, safety, and agent governance
 
