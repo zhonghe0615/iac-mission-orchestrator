@@ -91,7 +91,7 @@ Runs with the operator's intake fields, 2026-10-25, through the HTTP API (each v
 | --- | --- | --- | --- |
 | "Do a thermal survey of tank T-102. Do not perform repairs." (the reviewer's case) | T-102, repairs not allowed | One thermal inspection of T-102; 4.8 s, 1,368 tokens | No action needed; one command, to Scout A |
 | Default T-101 leak work order | T-101, repairs allowed | Thermal inspection, conditional `seal_weld_seam`, verification; 6.8 s, 1,733 tokens | Approved; resolved after verification |
-| "Inspect T-101 and repair the weld seam if you find a leak." (text conflicts with the fields) | T-101, repairs not allowed | One thermal inspection; the summary says the repair was omitted because of the operator constraints; 5.7 s, 1,414 tokens | Unresolved: defect found, no repair, as the fields required |
+| "Inspect T-101 and repair the weld seam if you find a leak." (historical run before text/field consistency validation) | T-101, repairs not allowed | One thermal inspection; the summary said the repair was omitted because of the operator constraints; 5.7 s, 1,414 tokens | This conflicting intake is now rejected before planning. |
 
 Earlier operator runs in the UI, before the intake fields existed, read back from the mission records:
 

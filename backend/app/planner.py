@@ -131,8 +131,8 @@ Rules:
 - A repair must depend on an inspection and carry the condition {"task": <inspection id>, "finding": "defect_detected"}.
 - Every repair must be followed by a verify_repair task that depends on it.
 - Respect the operator constraints given with the work order. They are enforced: a plan for a different
-  target, or with a repair when repairs are not allowed, is rejected. If the work order text disagrees
-  with them, follow the constraints and say so in the summary.
+  target, or with a repair when repairs are not allowed, is rejected. Clear contradictions between the
+  work order text and intake fields are rejected before planning; never treat text as approval.
 - Keep the plan minimal: at most 12 tasks."""
 
 

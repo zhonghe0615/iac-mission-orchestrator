@@ -30,6 +30,7 @@ from dataclasses import dataclass
 from typing import Any, Callable
 
 from .catalog import ACTIONS, ASSETS, Fleet
+from .intake import work_order_conflict
 from .plan import Constraints, Plan, validate_plan
 from .planner import Planner, PlanningOutcome
 from .robots import HEARTBEAT_INTERVAL_S, HEARTBEAT_LEASE_S, Command, DispatchError, RobotEvent, RobotPort
@@ -254,6 +255,9 @@ class Engine:
             raise EngineError(f"planner mode '{planner_mode}' is not configured; available: {sorted(self.planners)}")
         if constraints.target not in ASSETS:
             raise InvalidRequest(f"unknown target asset '{constraints.target}'; known assets: {', '.join(ASSETS)}")
+        conflict = work_order_conflict(work_order, constraints)
+        if conflict:
+            raise InvalidRequest(conflict)
         mission_id = new_id("M")
 
         def create() -> None:
@@ -339,6 +343,9 @@ class Engine:
             mission = self._mission(mission_id)
             if mission["status"] != "ready":
                 raise EngineError(f"mission cannot start from status {mission['status']}")
+            conflict = work_order_conflict(mission["work_order"], self._constraints(mission))
+            if conflict:
+                raise InvalidRequest(conflict)
             version = mission["plan_version"]
             plan = validate_plan(self.store.plan_version(mission_id, version)["plan"], self.fleet, self._constraints(mission))
             self._create_tasks(mission_id, version, plan)

@@ -65,6 +65,53 @@ def test_unknown_target_is_rejected_at_intake(tmp_path):
         assert client.get("/api/missions").json() == []
 
 
+@pytest.mark.parametrize(
+    ("work_order", "fields", "message"),
+    [
+        ("Inspect tank T-102", T101, "work order names T-102"),
+        ("Inspect T101 and T-102", T101, "work order names multiple target assets"),
+        ("Inspect T-101. Do not perform any repairs.", T101, "work order prohibits repairs"),
+        ("Inspect T-101 and repair the seam if needed", {"target": "tank-T101", "allow_repair": False}, "work order requests repair"),
+    ],
+)
+def test_explicit_work_order_conflicts_are_rejected_before_planning(tmp_path, work_order, fields, message):
+    with TestClient(create_app(settings(tmp_path))) as client:
+        response = client.post("/api/missions", json={"work_order": work_order, "planner": "fixture", **fields})
+        assert response.status_code == 422
+        assert message in response.json()["detail"]
+        assert client.get("/api/missions").json() == []
+
+
+@pytest.mark.parametrize(
+    ("work_order", "fields"),
+    [
+        (SURVEY_ORDER, T102_NO_REPAIR),
+        ("Inspect T-101 and report findings only; a repair crew will be scheduled separately.", {"target": "tank-T101", "allow_repair": False}),
+        ("Inspect T101 and repair the seam only if a defect is confirmed.", T101),
+        ("Inspect T-101; do not repair until approval is granted.", T101),
+        ("Inspect T-101; do not repair the seam until approval is granted.", T101),
+    ],
+)
+def test_matching_work_orders_are_accepted_at_intake(tmp_path, work_order, fields):
+    with TestClient(create_app(settings(tmp_path))) as client:
+        response = client.post("/api/missions", json={"work_order": work_order, "planner": "fixture", **fields})
+        assert response.status_code == 201
+
+
+def test_existing_conflicting_mission_cannot_start(tmp_path):
+    with TestClient(create_app(settings(tmp_path))) as client:
+        body = {"work_order": "Inspect and resolve the leak on T-101", "planner": "fixture", **T101}
+        mid = client.post("/api/missions", json=body).json()["mission"]["id"]
+        wait_for_status(client, mid, "ready")
+        client.app.state.store.update_mission(mid, work_order="Inspect T-102. Do not perform repairs.")
+        response = client.post(f"/api/missions/{mid}/start", json={})
+        assert response.status_code == 422
+        assert "work order names T-102" in response.json()["detail"]
+        detail = client.get(f"/api/missions/{mid}").json()
+        assert detail["mission"]["status"] == "ready"
+        assert detail["tasks"] == []
+
+
 @pytest.mark.anyio
 async def test_llm_is_told_the_constraints_and_corrected_when_it_ignores_them():
     seen: list = []

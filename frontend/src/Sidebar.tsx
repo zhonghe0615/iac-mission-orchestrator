@@ -122,7 +122,7 @@ export function NewMissionForm({
         <input type="checkbox" checked={allowRepair} onChange={(e) => setAllowRepair(e.target.checked)} /> Allow
         repairs (each still needs approval)
       </label>
-      <p className="hint">Every plan is checked against these two fields before it can run.</p>
+      <p className="hint">The work order is checked for clear conflicts with these fields; every plan is checked before it runs.</p>
       <label className="field">
         Planner
         <select value={planner} onChange={(e) => setPlanner(e.target.value)}>

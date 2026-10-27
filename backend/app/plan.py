@@ -45,8 +45,8 @@ class Plan(BaseModel):
 class Constraints:
     """Operator intake fields that every plan for the mission must respect.
 
-    They are explicit form fields, not parsed from the work order text, so the
-    check is deterministic. When the text and the fields disagree, the fields win.
+    The plan check uses explicit fields. A separate intake check rejects clear
+    contradictions between these fields and the work order text.
     """
 
     target: str

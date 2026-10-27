@@ -18,7 +18,7 @@ One FastAPI process with internal modules, a React console, and SQLite. Robots a
 
 **Where AI reasoning ends.** The model turns free text into a candidate plan: which inspections, in what order, under which conditions, and which repair procedure. Everything after that is deterministic code: validation, dependency and condition evaluation, robot routing, policy, approval, timeouts, and retries. The plan schema has no robot or approval fields and rejects unknown fields, so the model cannot choose a robot, issue a command, or approve anything.
 
-**Agentic planning.** The planner sends a bounded context: assets, robot types with capabilities and counts (not individual robots), and the action catalog with arguments, findings, and risk. The catalog defines the actions available to the planner; the model cannot call robot or OEM tools directly. The operator also sets two intake fields, the target asset and whether repairs are allowed. These are enforced, not inferred from the text. Every plan, whether from the model or edited by the operator, passes the same validator, and the validator runs again at start:
+**Agentic planning.** The planner sends a bounded context: assets, robot types with capabilities and counts (not individual robots), and the action catalog with arguments, findings, and risk. The catalog defines the actions available to the planner; the model cannot call robot or OEM tools directly. The operator also sets two intake fields, the target asset and whether repairs are allowed. Clear contradictions between those fields and the work order text are rejected at intake and checked again at start. Every plan, whether from the model or edited by the operator, passes the same validator, and the validator runs again at start:
 - the plan targets the operator's asset and contains no repair unless repairs are allowed;
 - it uses known actions and argument values, with no cycles;
 - conditions depend only on findings their dependency actually reports;
@@ -209,7 +209,7 @@ These are proposed pilot measures. The prototype's audit-derived metrics are use
 ## 8. Known limitations
 
 - **Assets are not reserved.** Two missions can repair the same tank at once; production needs asset-level locks.
-- **Only two constraints are enforced.** Target and repair permission are enforced; other instructions in the text (for example "thermal only") rely on the model.
+- **Only two constraints are enforced.** Target and repair permission are enforced, with explicit contradictions in the text rejected. The text check recognizes this demo's tank IDs and clear English repair instructions; ambiguous language and other instructions (for example "thermal only") still rely on the operator and model.
 - **No automatic reconciliation or replanning.** An unknown repair outcome always goes to a person, and plans are frozen at start.
 - **One process with a static fleet.** There is a single engine process per database, and adding a robot needs a restart. Routing ignores location and battery.
 - **No individual authentication or RBAC.** The optional hosted-demo password only limits access to the whole application.
