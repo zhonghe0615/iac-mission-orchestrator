@@ -1,14 +1,17 @@
 """FastAPI application: operator API, simulator controls, and live update stream."""
 
 import asyncio
+import base64
 import hashlib
 import json
+import os
+import secrets
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Literal
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -21,8 +24,8 @@ from .planner import FixturePlanner, LLMPlanner, Planner
 from .simulator import SimulatedFleet
 from .store import Store
 
-# The prototype has no authentication. The actor name is supplied by the UI
-# and recorded for audit only; see docs/DESIGN.md for production access control.
+# The optional demo password does not authenticate an individual operator.
+# Actor names are supplied by the UI and recorded for audit only.
 Actor = Field(default="operator", min_length=1, max_length=64)
 
 
@@ -115,6 +118,22 @@ def create_app(settings: Settings | None = None, planners: dict[str, Planner] | 
             store.close()
 
     app = FastAPI(title="IAC Mission Orchestrator", lifespan=lifespan)
+
+    demo_password = os.environ.get("DEMO_PASSWORD", "")
+    if demo_password:
+        expected = "Basic " + base64.b64encode(f"reviewer:{demo_password}".encode()).decode()
+
+        @app.middleware("http")
+        async def demo_access(request: Request, call_next):
+            if request.url.path != "/health" and not secrets.compare_digest(
+                request.headers.get("authorization", ""), expected
+            ):
+                return Response(status_code=401, headers={"WWW-Authenticate": 'Basic realm="IAC Demo"'})
+            return await call_next(request)
+
+    @app.get("/health")
+    async def health() -> dict[str, str]:
+        return {"status": "ok"}
 
     @app.exception_handler(EngineError)
     async def engine_error(_: Request, exc: EngineError) -> JSONResponse:

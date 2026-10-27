@@ -70,7 +70,7 @@ Each command and event is handled in one SQLite transaction together with its au
 | Stale or duplicate events | Inbox by event ID; events for closed attempts ignored | Per-robot sequence numbers to detect gaps |
 | Robot or network loss | Heartbeat lease; unreachable versus offline | Lease tuned per network (5–10 s on industrial Wi-Fi); state query on return |
 | Partial completion, intervention | Retry or cancel with a reason | "Mark done manually" and "replan from here", both audited |
-| Access control | None; actor names are self-reported | SSO, roles (operator, approver, viewer), site-scoped approval, two-person approval for welding |
+| Access control | Optional shared password for the hosted demo; actor names are self-reported, with no individual authentication or RBAC | SSO, roles (operator, approver, viewer), site-scoped approval, two-person approval for welding |
 | Invalid or unsafe LLM plans | Strict validation, enforced intake constraints, bounded correction, visible failure | Red-team prompt suites, plan-quality evaluation, versioned policy rules |
 
 **Recovery contract.** Preserve completed work, evidence, plan versions, and every execution attempt so an operator can see what happened, why progress stopped, and which actions remain available. Distinguish confirmed failure from an unknown outcome: a timeout does not prove that a physical action never occurred. The prototype retries safe inspections and pauses uncertain repairs. Production recovery would query the integration layer using the original command ID, reconcile the actual result, and resume only eligible remaining tasks. Unresolved outcomes stay with an authorized operator; manual completion or replanning must record the reason and supporting evidence rather than overwrite history. Planner failure leaves the mission visibly unplanned; invalid output never authorizes execution.
@@ -212,7 +212,7 @@ These are proposed pilot measures. The prototype's audit-derived metrics are use
 - **Only two constraints are enforced.** Target and repair permission are enforced; other instructions in the text (for example "thermal only") rely on the model.
 - **No automatic reconciliation or replanning.** An unknown repair outcome always goes to a person, and plans are frozen at start.
 - **One process with a static fleet.** There is a single engine process per database, and adding a robot needs a restart. Routing ignores location and battery.
-- **No authentication.**
+- **No individual authentication or RBAC.** The optional hosted-demo password only limits access to the whole application.
 
 ## 9. Evaluation criteria: implementation and evidence
 

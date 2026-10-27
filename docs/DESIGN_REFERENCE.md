@@ -160,7 +160,7 @@ The ceiling is the single process with one lock and SQLite: every event is handl
 - **Stale or duplicate events:** keep the inbox and attempt-state checks; add per-robot sequence numbers to detect gaps.
 - **Liveness:** tune the heartbeat lease per robot type and network; subscribe to OEM fleet-manager status where available; after a lease expiry, query the robot's actual state when it returns before trusting it with new work.
 - **Partial completion and intervention:** today an operator can retry or cancel. Production needs explicit "mark done manually" and "replan from here" actions, both audited.
-- **Access control:** the prototype has no authentication; the actor name is self-reported. Production needs SSO identities, role-based permissions (approver vs. operator vs. viewer), approval scoped by site and action risk, and possibly two-person approval for some actions.
+- **Access control:** the hosted demo can require one shared password, but actor names are self-reported and there is no individual authentication or RBAC. Production needs SSO identities, role-based permissions (approver vs. operator vs. viewer), approval scoped by site and action risk, and possibly two-person approval for some actions.
 - **Invalid or unsafe LLM plans:** already blocked by validation, with bounded correction and visible failure. Add red-team test suites for prompts, evaluation of plan quality over time, and policy rules that are versioned and reviewed like code.
 - **Understandable failure:** every state carries a reason string, the timeline records why each decision was made, and the UI states what the mission is waiting for and what the operator can do.
 

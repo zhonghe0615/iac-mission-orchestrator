@@ -53,6 +53,8 @@ uv run python -m app
 
 Then open **http://127.0.0.1:8000**. Use `python -m app --port 9000` if port 8000 is taken.
 
+For a hosted reviewer demo, see [Deploy on Render](docs/DEPLOY_RENDER.md). It uses one Oregon web service, a persistent disk, and an optional demo password.
+
 Stop the server with Ctrl+C. With the UI open, it takes up to 3 seconds to close the browser's live-update connection; a `CancelledError` traceback printed at that point is harmless.
 
 The database is created at `backend/data/orchestrator.db`, with the simulated tank state next to it in `orchestrator.sim.json`. Delete the database to start from a clean state; the tank state resets with it. Only one server process can use a database file at a time; a second one stops with a clear message.
@@ -180,6 +182,6 @@ npm run build    # updates frontend/dist, which the backend serves
 
 ## Known limitations
 
-See [docs/DESIGN.md](docs/DESIGN.md#8-known-limitations). Most notably: two missions can target the same asset at the same time, only the target and repair permission are enforced from the work order (other instructions rely on the model), there is no authentication (operator names are self-reported), and an unknown repair outcome always goes to the operator rather than being reconciled automatically.
+See [docs/DESIGN.md](docs/DESIGN.md#8-known-limitations). Most notably: two missions can target the same asset at the same time, only the target and repair permission are enforced from the work order (other instructions rely on the model), there is no individual authentication or RBAC (the optional hosted-demo password is shared, and operator names are self-reported), and an unknown repair outcome always goes to the operator rather than being reconciled automatically.
 
 All documentation and code comments are in English. Credentials stay outside version control (`backend/.env` is ignored).

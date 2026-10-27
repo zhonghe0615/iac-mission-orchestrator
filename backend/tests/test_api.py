@@ -24,6 +24,19 @@ def settings(tmp_path) -> Settings:
     )
 
 
+def test_demo_password_protects_ui_and_api(tmp_path, monkeypatch):
+    monkeypatch.setenv("DEMO_PASSWORD", "test-password")
+    with TestClient(create_app(settings(tmp_path))) as client:
+        assert client.get("/health").json() == {"status": "ok"}
+        for path in ("/", "/api/config", "/docs"):
+            blocked = client.get(path)
+            assert blocked.status_code == 401
+            assert blocked.headers["www-authenticate"] == 'Basic realm="IAC Demo"'
+            assert client.get(path, auth=("reviewer", "wrong-password")).status_code == 401
+            assert client.get(path, auth=("reviewer", "test-password")).status_code == 200
+
+
+
 def wait_for_status(client: TestClient, mission_id: str, status: str, timeout: float = 5.0) -> dict:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
