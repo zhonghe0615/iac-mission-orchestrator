@@ -71,6 +71,7 @@ def test_unknown_target_is_rejected_at_intake(tmp_path):
         ("Inspect tank T-102", T101, "work order names T-102"),
         ("Inspect T101 and T-102", T101, "work order names multiple target assets"),
         ("Inspect T-101. Do not perform any repairs.", T101, "work order prohibits repairs"),
+        ("Inspect T-101. No repairs are allowed.", T101, "work order prohibits repairs"),
         ("Inspect T-101 and repair the seam if needed", {"target": "tank-T101", "allow_repair": False}, "work order requests repair"),
     ],
 )
@@ -90,6 +91,10 @@ def test_explicit_work_order_conflicts_are_rejected_before_planning(tmp_path, wo
         ("Inspect T101 and repair the seam only if a defect is confirmed.", T101),
         ("Inspect T-101; do not repair until approval is granted.", T101),
         ("Inspect T-101; do not repair the seam until approval is granted.", T101),
+        ("No repairs have been performed on T-101 yet. Inspect and repair the seam if needed.", T101),
+        ("Inspect T-101. No repairs needed based on the last survey; repair if a new defect is found.", T101),
+        ("Inspect T-101. No repairs are needed based on the last survey; repair if a new defect is found.", T101),
+        ("Inspect T-101. The repair the crew made last week should be verified.", {"target": "tank-T101", "allow_repair": False}),
     ],
 )
 def test_matching_work_orders_are_accepted_at_intake(tmp_path, work_order, fields):

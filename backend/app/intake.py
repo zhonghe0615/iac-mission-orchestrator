@@ -7,11 +7,17 @@ from .plan import Constraints
 
 ASSET_REF = re.compile(r"\bT-?(\d{3})\b", re.IGNORECASE)
 NO_REPAIR = re.compile(
-    r"\b(?:no|do not|don't)\s+(?:perform\s+)?(?:any\s+)?repairs?\b"
+    r"\b(?:(?:do not|don't)\s+(?:perform\s+)?(?:any\s+)?repairs?"
+    r"|no\s+(?:any\s+)?repairs?(?!\s+(?:have|has|had|were|was|needed|required|planned|scheduled"
+    r"|are\s+(?:needed|required|planned|scheduled))))\b"
     r"(?![^.!?;]*\b(?:unless|until|without|before)\b)",
     re.IGNORECASE,
 )
-REPAIR_REQUEST = re.compile(r"\b(?:repair|replace|seal)\s+(?:the|it|only|if|now)\b", re.IGNORECASE)
+REPAIR_REQUEST = re.compile(
+    r"(?:^|[.!?;:,]\s*|\b(?:and|then|please|to|must|should)\s+)"
+    r"(?:repair|replace|seal)\s+(?:the|it|only|if|now)\b",
+    re.IGNORECASE,
+)
 
 
 def work_order_conflict(work_order: str, constraints: Constraints) -> str | None:
