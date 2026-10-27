@@ -113,6 +113,7 @@ The suite runs offline: robot timings are scaled down, and the LLM planner is te
 | Duplicate and out-of-order events, restart recovery (including between repair and verification), metrics | `tests/test_reliability.py` |
 | Typed fleet config, a new robot type via config only, 520 robots with 40 concurrent missions, 20 types with 1,000 robots | `tests/test_fleet.py` |
 | Idempotency keys for operator commands, repeated robot commands | `tests/test_idempotency.py` |
+| Stale plan edits and starts, simultaneous operator decisions, retry-specific approval requests | `tests/test_collaboration.py`, `tests/test_missions.py` |
 | Thread-safe reads, foreign-thread rejection, one server process per database | `tests/test_concurrency.py` |
 | Heartbeat lease: silent robot loss detected while busy or idle, recovery, no false alarms | `tests/test_liveness.py` |
 | HTTP API end to end | `tests/test_api.py` |
@@ -121,8 +122,8 @@ The suite runs offline: robot timings are scaled down, and the LLM planner is te
 
 See [docs/DEMO.md](docs/DEMO.md) for the full walkthrough. In short:
 
-1. Submit a work order with its target asset and whether repairs are allowed. Explicit asset or repair-permission conflicts between the text and fields are rejected. Every plan is checked against the fields. The plan appears for review with its source (LLM, fixture, or operator edit). Edit it if needed; every edit is validated.
-2. Start the mission and watch tasks, attempts, evidence, and the timeline update live.
+1. Submit a work order with its target asset and whether repairs are allowed. Explicit asset or repair-permission conflicts between the text and fields are rejected. Every plan is checked against the fields. The plan appears for review with its source (LLM, fixture, or operator edit). Edit it if needed; every edit is validated. An older blocked mission can be copied into a new work order for correction without changing its audit record.
+2. Start the mission and watch tasks, attempts, evidence, and the timeline update live. Plan edits and starts carry the version the operator reviewed; stale pages cannot overwrite or start a newer plan. Approvals carry the current request's event sequence, so an old approval card cannot authorize a later retry.
 3. Inject faults from the Fleet panel: take a robot offline (announced) or lose it silently (detected by heartbeat), or make its next command fail, time out, arrive twice, or arrive out of order.
 4. Approve or reject the repair when asked.
 

@@ -47,7 +47,7 @@ def test_fixture_planner_declines_incompatible_work_orders(tmp_path):
         detail = wait_for_status(client, mid, "planning_failed")
         assert "fixture planner only produces its tank-T101" in detail["mission"]["status_reason"]
         assert detail["plan_versions"] == []
-        assert client.post(f"/api/missions/{mid}/start", json={}).status_code == 409
+        assert client.post(f"/api/missions/{mid}/start", json={"expected_plan_version": 1}).status_code == 409
 
         # T-101 without repairs is declined too: the fixture plan always contains one.
         body = {"work_order": "Inspect T-101, no repairs", "planner": "fixture", "target": "tank-T101", "allow_repair": False}
@@ -109,12 +109,24 @@ def test_existing_conflicting_mission_cannot_start(tmp_path):
         mid = client.post("/api/missions", json=body).json()["mission"]["id"]
         wait_for_status(client, mid, "ready")
         client.app.state.store.update_mission(mid, work_order="Inspect T-102. Do not perform repairs.")
-        response = client.post(f"/api/missions/{mid}/start", json={})
+        response = client.post(f"/api/missions/{mid}/start", json={"expected_plan_version": 1})
         assert response.status_code == 422
         assert "work order names T-102" in response.json()["detail"]
         detail = client.get(f"/api/missions/{mid}").json()
         assert detail["mission"]["status"] == "ready"
         assert detail["tasks"] == []
+        assert "work order names T-102" in detail["intake_conflict"]
+
+
+def test_old_mission_without_target_shows_a_recovery_action(tmp_path):
+    with TestClient(create_app(settings(tmp_path))) as client:
+        body = {"work_order": "Inspect and resolve the leak on T-101", "planner": "fixture", **T101}
+        mid = client.post("/api/missions", json=body).json()["mission"]["id"]
+        wait_for_status(client, mid, "ready")
+        client.app.state.store.update_mission(mid, target=None)
+        detail = client.get(f"/api/missions/{mid}").json()
+        assert "no target asset" in detail["intake_conflict"]
+        assert client.post(f"/api/missions/{mid}/start", json={"expected_plan_version": 1}).status_code == 422
 
 
 @pytest.mark.anyio

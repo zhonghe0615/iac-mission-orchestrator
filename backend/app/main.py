@@ -40,6 +40,7 @@ class CreateMission(BaseModel):
 
 class EditPlan(BaseModel):
     plan: Any
+    expected_plan_version: int = Field(ge=0)
     actor: str = Actor
 
 
@@ -47,8 +48,14 @@ class ActorOnly(BaseModel):
     actor: str = Actor
 
 
+class StartMission(ActorOnly):
+    expected_plan_version: int = Field(ge=1)
+
+
 class Decision(BaseModel):
     decision: Literal["approve", "reject"]
+    expected_plan_version: int = Field(ge=1)
+    expected_request_seq: int = Field(ge=1)
     actor: str = Actor
     comment: str = Field(default="", max_length=1000)
 
@@ -242,17 +249,17 @@ def create_app(settings: Settings | None = None, planners: dict[str, Planner] | 
         engine = engine_of(request)
 
         async def run() -> dict:
-            await engine.update_plan(mission_id, body.plan, body.actor)
+            await engine.update_plan(mission_id, body.plan, body.actor, expected_plan_version=body.expected_plan_version)
             return engine.mission_detail(mission_id)
 
         return await idempotent(request, body, run)
 
     @app.post("/api/missions/{mission_id}/start")
-    async def start(mission_id: str, body: ActorOnly, request: Request) -> JSONResponse:
+    async def start(mission_id: str, body: StartMission, request: Request) -> JSONResponse:
         engine = engine_of(request)
 
         async def run() -> dict:
-            await engine.start_mission(mission_id, body.actor)
+            await engine.start_mission(mission_id, body.actor, expected_plan_version=body.expected_plan_version)
             return engine.mission_detail(mission_id)
 
         return await idempotent(request, body, run)
@@ -262,7 +269,10 @@ def create_app(settings: Settings | None = None, planners: dict[str, Planner] | 
         engine = engine_of(request)
 
         async def run() -> dict:
-            await engine.decide_approval(mission_id, task_id, body.decision, body.actor, body.comment)
+            await engine.decide_approval(
+                mission_id, task_id, body.decision, body.actor, body.comment,
+                expected_plan_version=body.expected_plan_version, expected_request_seq=body.expected_request_seq,
+            )
             return engine.mission_detail(mission_id)
 
         return await idempotent(request, body, run)

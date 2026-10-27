@@ -12,6 +12,7 @@ Where each behavior lives, and the test that proves it. Paths are relative to `b
 | Plan schema (no robot or approval fields) | `app/plan.py`: `Plan`, `PlanTask` (`extra="forbid"`) | `test_plan.py::test_invalid_plans_are_rejected` |
 | Plan safety rules | `app/plan.py`: `validate_plan` | `test_plan.py::test_repair_without_prior_inspection_is_rejected`, `test_repair_without_verification_is_rejected` |
 | Operator constraints (target, repairs allowed) | `app/plan.py`: `Constraints`; `app/engine.py`: `_constraints` | `test_constraints.py` (whole file) |
+| Concurrent operator actions | `app/engine.py`: `update_plan`, `start_mission`, `decide_approval`; `app/main.py`: versioned request bodies | `test_collaboration.py` |
 | Mission lifecycle commands | `app/engine.py`: `submit_mission`, `update_plan`, `start_mission`, `decide_approval`, `retry_task`, `cancel_mission` | `test_missions.py::test_approved_repair_resolves_mission` |
 | Scheduling: dependencies, conditions, approval requests | `app/engine.py`: `_advance`, `_request_approval` | `test_missions.py::test_no_defect_skips_repair`, `test_independent_inspections_run_in_parallel_on_a_and_b` |
 | Routing by capability and availability | `app/engine.py`: `_route`; `app/store.py`: `available_robot_ids` | `test_missions.py::test_no_replacement_waits_with_reason_then_resumes`, `test_fleet.py::test_many_robot_types_route_only_to_capable_types` |

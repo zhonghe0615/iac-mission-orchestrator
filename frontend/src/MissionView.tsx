@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api, AuditEvent, Evidence, MissionDetail, Plan, Robot, SiteContext, Task } from "./api";
 import { buildSteps, ProgressBar } from "./ProgressBar";
 import { ErrorBox, label, Pill, seconds, time, useAction } from "./ui";
@@ -10,6 +10,13 @@ const TERMINAL = ["resolved", "unresolved", "no_action_needed", "cancelled"];
 function explain(detail: MissionDetail): { headline: string; reason: string; next: string } {
   const m = detail.mission;
   const reason = m.status_reason;
+  if (detail.intake_conflict && PRE_START.includes(m.status)) {
+    return {
+      headline: "Work order needs correction",
+      reason: detail.intake_conflict,
+      next: "Copy this work order, correct the text or fields, and submit it as a new mission.",
+    };
+  }
   switch (m.status) {
     case "planning":
       return { headline: "Generating a plan", reason: "The planner is working on the work order.", next: "Wait." };
@@ -54,19 +61,24 @@ export function MissionView({
   site,
   operator,
   onChange,
+  onCopy,
 }: {
   detail: MissionDetail;
   robots: Robot[];
   site: SiteContext | null;
   operator: string;
   onChange: () => void;
+  onCopy: () => void;
 }) {
   const m = detail.mission;
   const action = useAction();
+  const [reviewedVersion, setReviewedVersion] = useState(m.plan_version);
+  const [planViewKey, setPlanViewKey] = useState(0);
   const info = explain(detail);
   const awaiting = detail.tasks.filter((t) => t.status === "awaiting_approval");
   const blocked = detail.tasks.filter((t) => t.status === "failed" || t.status === "needs_intervention");
   const source = detail.current_plan?.source;
+  const planChanged = PRE_START.includes(m.status) && m.plan_version !== reviewedVersion;
 
   return (
     <div className="mission">
@@ -86,8 +98,8 @@ export function MissionView({
           {PRE_START.includes(m.status) && m.plan_version > 0 && (
             <button
               className="primary"
-              disabled={action.busy || m.status !== "ready"}
-              onClick={() => action.run(async () => { await api.start(m.id, operator); onChange(); })}
+              disabled={action.busy || m.status !== "ready" || Boolean(detail.intake_conflict) || planChanged}
+              onClick={() => action.run(async () => { await api.start(m.id, operator, reviewedVersion); onChange(); })}
             >
               Start mission
             </button>
@@ -107,6 +119,30 @@ export function MissionView({
         </div>
       </div>
       <ErrorBox error={action.error} />
+      {detail.intake_conflict && PRE_START.includes(m.status) && (
+        <div className="error-box" role="alert">
+          <strong>{detail.intake_conflict}</strong>
+          <p>The original mission is kept for audit. Correct a copy before submitting it again.</p>
+          <button onClick={onCopy}>Copy to new work order</button>
+        </div>
+      )}
+      {planChanged && !detail.intake_conflict && (
+        <div className="error-box" role="alert">
+          <strong>
+            {reviewedVersion === 0
+              ? `Plan v${m.plan_version} is ready for review.`
+              : `Plan changed from v${reviewedVersion} to v${m.plan_version} since this page last reviewed it.`}
+          </strong>
+          <p>Reloading this mission replaces any unsaved plan draft with the latest plan.</p>
+          <button onClick={() => {
+            setReviewedVersion(m.plan_version);
+            setPlanViewKey((current) => current + 1);
+            onChange();
+          }}>
+            Reload latest plan
+          </button>
+        </div>
+      )}
 
       <ProgressBar steps={buildSteps(detail, site, new Map(robots.map((r) => [r.id, r.name])))} />
 
@@ -116,15 +152,16 @@ export function MissionView({
         <p className="next">Next: {info.next}</p>
       </div>
 
-      {awaiting.map((t) => (
-        <ApprovalCard key={t.task_id} detail={detail} task={t} operator={operator} onChange={onChange} />
-      ))}
+      {awaiting.map((t) => {
+        const requestSeq = [...detail.events].reverse().find((e) => e.kind === "approval_requested" && e.data.task_id === t.task_id)?.seq;
+        return <ApprovalCard key={`${t.task_id}:${requestSeq}`} detail={detail} task={t} requestSeq={requestSeq} operator={operator} onChange={onChange} />;
+      })}
       {blocked.map((t) => (
         <InterventionCard key={t.task_id} missionId={m.id} task={t} operator={operator} onChange={onChange} />
       ))}
 
       {PRE_START.includes(m.status) ? (
-        <PlanReview detail={detail} operator={operator} onChange={onChange} />
+        <PlanReview key={planViewKey} detail={detail} operator={operator} onChange={onChange} />
       ) : (
         <TaskBoard detail={detail} robots={robots} />
       )}
@@ -151,11 +188,13 @@ function sourceLabel(source: string | undefined): string {
 function ApprovalCard({
   detail,
   task,
+  requestSeq,
   operator,
   onChange,
 }: {
   detail: MissionDetail;
   task: Task;
+  requestSeq: number | undefined;
   operator: string;
   onChange: () => void;
 }) {
@@ -163,7 +202,8 @@ function ApprovalCard({
   const action = useAction();
   const decide = (decision: "approve" | "reject") =>
     action.run(async () => {
-      await api.decide(detail.mission.id, task.task_id, decision, operator, comment);
+      if (requestSeq === undefined) throw new Error("Approval request is missing; refresh this mission before deciding.");
+      await api.decide(detail.mission.id, task.task_id, decision, operator, comment, task.plan_version, requestSeq);
       onChange();
     });
   const basis = task.condition ? detail.evidence.filter((e) => e.task_id === task.condition!.task) : [];
@@ -184,10 +224,10 @@ function ApprovalCard({
       ))}
       <input placeholder="Comment (optional)" value={comment} onChange={(e) => setComment(e.target.value)} />
       <div className="row">
-        <button className="primary" disabled={action.busy} onClick={() => decide("approve")}>
+        <button className="primary" disabled={action.busy || requestSeq === undefined} onClick={() => decide("approve")}>
           Approve repair
         </button>
-        <button className="danger" disabled={action.busy} onClick={() => decide("reject")}>
+        <button className="danger" disabled={action.busy || requestSeq === undefined} onClick={() => decide("reject")}>
           Reject
         </button>
       </div>
@@ -235,7 +275,15 @@ function PlanReview({ detail, operator, onChange }: { detail: MissionDetail; ope
   const plan = detail.current_plan?.plan;
   const [editing, setEditing] = useState(!plan);
   const [text, setText] = useState(() => JSON.stringify(plan ?? { summary: "", target: detail.mission.target, tasks: [] }, null, 2));
+  const [editBaseVersion, setEditBaseVersion] = useState(detail.mission.plan_version);
   const action = useAction();
+
+  useEffect(() => {
+    if (!editing) {
+      setText(JSON.stringify(plan ?? { summary: "", target: detail.mission.target, tasks: [] }, null, 2));
+      setEditBaseVersion(detail.mission.plan_version);
+    }
+  }, [editing, detail.mission.plan_version, detail.mission.target, plan]);
 
   const save = () =>
     action.run(async () => {
@@ -245,13 +293,13 @@ function PlanReview({ detail, operator, onChange }: { detail: MissionDetail; ope
       } catch (e) {
         throw new Error(`Plan is not valid JSON: ${e instanceof Error ? e.message : e}`);
       }
-      await api.editPlan(detail.mission.id, parsed, operator);
+      await api.editPlan(detail.mission.id, parsed, operator, editBaseVersion);
       setEditing(false);
       onChange();
     });
 
   return (
-    <section className="card">
+    <section className="card" id="plan-review">
       <div className="card-head">
         <h3>
           Plan {plan ? `v${detail.current_plan!.version}` : "(none)"}
@@ -269,6 +317,11 @@ function PlanReview({ detail, operator, onChange }: { detail: MissionDetail; ope
       )}
       {editing && (
         <>
+          {editBaseVersion !== detail.mission.plan_version && (
+            <p className="warn-text">
+              Plan changed from v{editBaseVersion} to v{detail.mission.plan_version} while this draft was open. Your draft is preserved; load the latest plan before saving.
+            </p>
+          )}
           <p className="hint">
             Edits are validated by the backend before they can run: unsupported actions, bad arguments, missing
             dependencies, cycles and unsafe repair sequencing are rejected. Approval is enforced at runtime and cannot be
@@ -276,17 +329,18 @@ function PlanReview({ detail, operator, onChange }: { detail: MissionDetail; ope
           </p>
           <textarea className="mono plan-editor" rows={22} value={text} onChange={(e) => setText(e.target.value)} />
           <div className="row">
-            <button className="primary" disabled={action.busy} onClick={save}>
+            <button className="primary" disabled={action.busy || editBaseVersion !== detail.mission.plan_version} onClick={save}>
               Validate and save as new version
             </button>
             {plan && (
               <button
                 onClick={() => {
                   setText(JSON.stringify(plan, null, 2));
+                  setEditBaseVersion(detail.mission.plan_version);
                   action.clear();
                 }}
               >
-                Reset
+                {editBaseVersion !== detail.mission.plan_version ? "Load latest plan" : "Reset"}
               </button>
             )}
           </div>

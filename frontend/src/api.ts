@@ -114,6 +114,7 @@ export interface AuditEvent {
 
 export interface MissionDetail {
   mission: Mission;
+  intake_conflict: string | null;
   plan_versions: PlanVersion[];
   current_plan: PlanVersion | null;
   tasks: Task[];
@@ -226,11 +227,16 @@ export const api = {
   metrics: () => request<Metrics>("GET", "/api/metrics"),
   createMission: (work_order: string, target: string, allow_repair: boolean, planner: string, actor: string) =>
     request<MissionDetail>("POST", "/api/missions", { work_order, target, allow_repair, planner, actor }),
-  editPlan: (id: string, plan: unknown, actor: string) =>
-    request<MissionDetail>("PUT", `/api/missions/${id}/plan`, { plan, actor }),
-  start: (id: string, actor: string) => request<MissionDetail>("POST", `/api/missions/${id}/start`, { actor }),
-  decide: (id: string, taskId: string, decision: "approve" | "reject", actor: string, comment: string) =>
-    request<MissionDetail>("POST", `/api/missions/${id}/tasks/${taskId}/decision`, { decision, actor, comment }),
+  editPlan: (id: string, plan: unknown, actor: string, expectedPlanVersion: number) =>
+    request<MissionDetail>("PUT", `/api/missions/${id}/plan`, { plan, actor, expected_plan_version: expectedPlanVersion }),
+  start: (id: string, actor: string, expectedPlanVersion: number) =>
+    request<MissionDetail>("POST", `/api/missions/${id}/start`, { actor, expected_plan_version: expectedPlanVersion }),
+  decide: (
+    id: string, taskId: string, decision: "approve" | "reject", actor: string, comment: string,
+    expectedPlanVersion: number, expectedRequestSeq: number,
+  ) => request<MissionDetail>("POST", `/api/missions/${id}/tasks/${taskId}/decision`, {
+    decision, actor, comment, expected_plan_version: expectedPlanVersion, expected_request_seq: expectedRequestSeq,
+  }),
   retry: (id: string, taskId: string, actor: string) =>
     request<MissionDetail>("POST", `/api/missions/${id}/tasks/${taskId}/retry`, { actor }),
   cancel: (id: string, actor: string) => request<MissionDetail>("POST", `/api/missions/${id}/cancel`, { actor }),

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, Config, Metrics, Mission, MissionDetail, RobotsResponse, AuditEvent, SiteContext } from "./api";
-import { FleetPanel, MetricsPanel, MissionList, NewMissionForm } from "./Sidebar";
+import { FleetPanel, MetricsPanel, MissionList, NewMissionForm, WorkOrderDraft } from "./Sidebar";
 import { MissionView } from "./MissionView";
 
 const OPERATOR_KEY = "orchestrator.operator";
@@ -25,6 +25,7 @@ export default function App() {
   const [operator, setOperator] = useState(loadOperator);
   const [connected, setConnected] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [copiedDraft, setCopiedDraft] = useState<(WorkOrderDraft & { nonce: number }) | null>(null);
   const selectedRef = useRef(selected);
   selectedRef.current = selected;
 
@@ -101,9 +102,11 @@ export default function App() {
       <div className="layout">
         <aside className="sidebar">
           <NewMissionForm
+            key={copiedDraft?.nonce ?? 0}
             config={config}
             site={site}
             operator={operator}
+            draft={copiedDraft ?? undefined}
             onCreated={(d) => {
               // Update the ref first: refresh() reads it before React re-renders.
               selectedRef.current = d.mission.id;
@@ -125,6 +128,17 @@ export default function App() {
               site={site}
               operator={operator}
               onChange={refresh}
+              onCopy={() => {
+                const m = detail.mission;
+                setCopiedDraft((previous) => ({
+                  nonce: (previous?.nonce ?? 0) + 1,
+                  workOrder: m.work_order,
+                  target: m.target ?? "tank-T101",
+                  allowRepair: Boolean(m.allow_repair),
+                  planner: m.planner_mode,
+                }));
+                document.getElementById("new-work-order")?.scrollIntoView({ behavior: "smooth" });
+              }}
             />
           ) : (
             <div className="empty">

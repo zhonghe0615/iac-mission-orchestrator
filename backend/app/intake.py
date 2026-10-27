@@ -22,6 +22,8 @@ REPAIR_REQUEST = re.compile(
 
 def work_order_conflict(work_order: str, constraints: Constraints) -> str | None:
     """Catch explicit asset IDs and repair instructions; leave ambiguous prose to the operator."""
+    if not constraints.target:
+        return "mission has no target asset; copy it into a new work order and select the target"
     assets = {f"T-{match}" for match in ASSET_REF.findall(work_order)}
     chosen = constraints.target.removeprefix("tank-").upper().replace("-", "")
     if len(assets) > 1:

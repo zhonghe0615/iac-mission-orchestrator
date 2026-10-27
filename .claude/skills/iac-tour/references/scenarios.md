@@ -15,7 +15,7 @@ Normal-speed timings: thermal 4 s, visual 3 s, repair 6 s, verification 4 s. "Du
 ## 1. Main mission: plan, approve, repair, verify
 
 - **Console:** keep the default work order (T-101, **Allow repairs** ticked), then **Generate plan**, **Start mission**, **Approve repair**.
-- **Helper:** `iac create "Inspect and resolve the suspected leak on tank T-101" --planner fixture`, then `iac start MID`, `iac wait MID waiting_approval`, `iac events MID policy_decision`, `iac approve MID`, `iac wait MID resolved`.
+- **Helper:** `iac create "Inspect and resolve the suspected leak on tank T-101" --planner fixture`, then `iac start MID 1`, `iac wait MID waiting_approval`, `iac events MID policy_decision`, `iac approve MID t3 REQUEST_SEQ` (use the sequence printed by `iac wait`), `iac wait MID resolved`.
 - **Point out:**
   - the plan has no robot or approval fields;
   - Scout A is chosen by capability and preference;
@@ -25,7 +25,7 @@ Normal-speed timings: thermal 4 s, visual 3 s, repair 6 s, verification 4 s. "Du
 
 ## 2. Denied repair
 
-- **Helper:** `iac create … --planner fixture`, then `iac start MID`, `iac wait MID waiting_approval`, `iac reject MID t3 "Crew not available"`, `iac wait MID unresolved`.
+- **Helper:** `iac create … --planner fixture`, then `iac start MID 1`, `iac wait MID waiting_approval`, `iac reject MID t3 REQUEST_SEQ "Crew not available"`, `iac wait MID unresolved`.
 - **Expect:**
   - t3 is `rejected` and was never sent to a robot (no attempt);
   - t4 is `skipped`, because its dependency was rejected;
@@ -34,7 +34,7 @@ Normal-speed timings: thermal 4 s, visual 3 s, repair 6 s, verification 4 s. "Du
 ## 3. Robot goes offline mid-inspection
 
 - **Console:** start a mission, then click **Take offline** on Scout A during t1.
-- **Helper:** `iac start MID`, then within about 3 s `iac fault scout-a offline`, then `iac wait MID waiting_approval`.
+- **Helper:** `iac start MID 1`, then within about 3 s `iac fault scout-a offline`, then `iac wait MID waiting_approval`.
 - **Expect:**
   - t1 shows `attempts=[scout-a:lost, scout-b:succeeded]`: the same task and the same mission, with both attempts kept;
   - "lost" means the outcome is unknown; the inspection is safe to repeat, so it moves to Scout B.
@@ -73,7 +73,7 @@ Normal-speed timings: thermal 4 s, visual 3 s, repair 6 s, verification 4 s. "Du
 ## 8. A plan edit that breaks a safety rule
 
 - **Console:** on a ready mission, **Edit plan**, delete the repair task's `condition`, then **Validate and save**.
-- **Helper:** `iac plan MID > plan.json`. Remove `condition` from the repair task, then run `iac edit MID plan.json`.
+- **Helper:** `iac plan MID > plan.json`. Remove `condition` from the repair task inside the file's `plan` field, then run `iac edit MID plan.json`. The exported version prevents an old file from overwriting a newer plan.
 - **Expect:** `HTTP 422: plan failed validation`, because a repair must be conditioned on `defect_detected`. The same validator checks model output.
 
 ## 9. Operator constraints versus the work order
@@ -85,7 +85,7 @@ Normal-speed timings: thermal 4 s, visual 3 s, repair 6 s, verification 4 s. "Du
 
 ## 10. Approval cannot be bypassed
 
-- **Helper:** start a mission and immediately run `iac approve MID t3`. Expect `HTTP 409: task t3 is not awaiting approval`. Starting a running mission again gives 409 too.
+- **Helper:** start a mission and immediately run `iac approve MID t3 1`. Expect `HTTP 409: task t3 is not awaiting approval`. Starting a running mission again gives 409 too.
 - **Point out:** approval is tied to the plan version and the exact action, and is used by exactly one dispatch (`test_missions.py::test_api_requests_cannot_bypass_approval`).
 
 ## 11. Restart while waiting for approval
@@ -93,7 +93,7 @@ Normal-speed timings: thermal 4 s, visual 3 s, repair 6 s, verification 4 s. "Du
 - **Steps:**
   1. Run a mission to `waiting_approval`.
   2. Stop the server, start it again, then `iac show MID`.
-  3. It is still waiting, with the same reason and evidence. `iac approve MID` completes it.
+  3. It is still waiting, with the same reason and evidence. `iac show MID` prints the approval request sequence; `iac approve MID t3 REQUEST_SEQ` completes it.
 - **Point out:** if the server stops between the repair and the verification, the tank stays repaired, and verification passes after the restart (`test_restart_between_repair_and_verification_resolves`).
 
 ## 12. Metrics

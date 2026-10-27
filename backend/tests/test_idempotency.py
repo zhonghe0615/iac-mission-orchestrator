@@ -46,16 +46,18 @@ def test_repeated_approval_is_replayed_not_reapplied(tmp_path):
     with TestClient(create_app(settings(tmp_path))) as client:
         mid = client.post("/api/missions", json=WORK_ORDER).json()["mission"]["id"]
         wait_for_status(client, mid, "ready")
-        client.post(f"/api/missions/{mid}/start", json={})
-        wait_for_status(client, mid, "waiting_approval")
+        client.post(f"/api/missions/{mid}/start", json={"expected_plan_version": 1})
+        detail = wait_for_status(client, mid, "waiting_approval")
+        request_seq = next(e["seq"] for e in reversed(detail["events"]) if e["kind"] == "approval_requested")
         url = f"/api/missions/{mid}/tasks/t3/decision"
         headers = {"Idempotency-Key": "approve-1"}
-        first = client.post(url, json={"decision": "approve", "actor": "dana"}, headers=headers)
-        second = client.post(url, json={"decision": "approve", "actor": "dana"}, headers=headers)
+        body = {"decision": "approve", "actor": "dana", "expected_plan_version": 1, "expected_request_seq": request_seq}
+        first = client.post(url, json=body, headers=headers)
+        second = client.post(url, json=body, headers=headers)
         assert first.status_code == second.status_code == 200
         assert second.headers["Idempotent-Replayed"] == "true"
         # Without the key the second click would have been a 409 conflict.
-        assert client.post(url, json={"decision": "approve"}).status_code == 409
+        assert client.post(url, json={"decision": "approve", "expected_plan_version": 1, "expected_request_seq": request_seq}).status_code == 409
         detail = wait_for_status(client, mid, "resolved")
         assert len(detail["approvals"]) == 1
         assert len([t for t in detail["tasks"] if t["task_id"] == "t3"][0]["attempts"]) == 1
@@ -64,8 +66,8 @@ def test_repeated_approval_is_replayed_not_reapplied(tmp_path):
 def test_errors_are_stored_and_replayed(tmp_path):
     with TestClient(create_app(settings(tmp_path))) as client:
         headers = {"Idempotency-Key": "start-missing"}
-        first = client.post("/api/missions/M-missing/start", json={}, headers=headers)
-        second = client.post("/api/missions/M-missing/start", json={}, headers=headers)
+        first = client.post("/api/missions/M-missing/start", json={"expected_plan_version": 1}, headers=headers)
+        second = client.post("/api/missions/M-missing/start", json={"expected_plan_version": 1}, headers=headers)
         assert first.status_code == second.status_code == 404
         assert second.headers["Idempotent-Replayed"] == "true"
 
@@ -75,7 +77,7 @@ def test_same_key_for_different_endpoints_is_independent(tmp_path):
         headers = {"Idempotency-Key": "shared"}
         mid = client.post("/api/missions", json=WORK_ORDER, headers=headers).json()["mission"]["id"]
         wait_for_status(client, mid, "ready")
-        started = client.post(f"/api/missions/{mid}/start", json={}, headers=headers)
+        started = client.post(f"/api/missions/{mid}/start", json={"expected_plan_version": 1}, headers=headers)
         assert started.status_code == 200 and "Idempotent-Replayed" not in started.headers
 
 

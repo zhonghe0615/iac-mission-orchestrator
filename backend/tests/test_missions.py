@@ -106,7 +106,8 @@ async def test_late_result_from_timed_out_attempt_is_ignored(h):
 async def test_unknown_repair_outcome_is_not_redispatched(h):
     mid = await h.started_mission()
     await h.wait_status(mid, "waiting_approval")
-    await h.engine.decide_approval(mid, "t3", "approve", "tester", "")
+    first_request = [e for e in h.store.events(mid) if e["kind"] == "approval_requested"][-1]["seq"]
+    await h.engine.decide_approval(mid, "t3", "approve", "tester", "", expected_request_seq=first_request)
     await h.wait(lambda: h.commands("repair"), what="repair dispatch")
 
     await h.sim.set_online("manipulator-c", False)
@@ -121,7 +122,12 @@ async def test_unknown_repair_outcome_is_not_redispatched(h):
     await h.engine.retry_task(mid, "t3", "tester")
     await h.wait_task(mid, "t3", "awaiting_approval")
     assert len(h.commands("repair")) == 1
-    await h.engine.decide_approval(mid, "t3", "approve", "tester", "site confirmed no repair applied")
+    second_request = [e for e in h.store.events(mid) if e["kind"] == "approval_requested"][-1]["seq"]
+    assert second_request != first_request
+    with pytest.raises(EngineError, match="approval request changed"):
+        await h.engine.decide_approval(mid, "t3", "approve", "stale browser", "", expected_request_seq=first_request)
+    assert len(h.commands("repair")) == 1
+    await h.engine.decide_approval(mid, "t3", "approve", "tester", "site confirmed no repair applied", expected_request_seq=second_request)
     await h.wait_status(mid, "resolved")
     assert len(h.commands("repair")) == 2
 

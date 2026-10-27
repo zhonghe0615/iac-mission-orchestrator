@@ -61,17 +61,18 @@ def test_operator_flow_over_http(tmp_path):
         mid = created.json()["mission"]["id"]
         wait_for_status(client, mid, "ready")
 
-        bad = client.put(f"/api/missions/{mid}/plan", json={"plan": {"summary": "x", "target": "tank-T101", "tasks": []}})
+        bad = client.put(f"/api/missions/{mid}/plan", json={"plan": {"summary": "x", "target": "tank-T101", "tasks": []}, "expected_plan_version": 1})
         assert bad.status_code == 422 and bad.json()["errors"]
 
-        assert client.post(f"/api/missions/{mid}/start", json={"actor": "dana"}).status_code == 200
+        assert client.post(f"/api/missions/{mid}/start", json={"actor": "dana", "expected_plan_version": 1}).status_code == 200
         detail = wait_for_status(client, mid, "waiting_approval")
         assert any(e["kind"] == "approval_requested" for e in detail["events"])
+        request_seq = next(e["seq"] for e in reversed(detail["events"]) if e["kind"] == "approval_requested")
 
-        early = client.post(f"/api/missions/{mid}/tasks/t4/decision", json={"decision": "approve"})
+        early = client.post(f"/api/missions/{mid}/tasks/t4/decision", json={"decision": "approve", "expected_plan_version": 1, "expected_request_seq": request_seq})
         assert early.status_code == 409
 
-        ok = client.post(f"/api/missions/{mid}/tasks/t3/decision", json={"decision": "approve", "actor": "dana"})
+        ok = client.post(f"/api/missions/{mid}/tasks/t3/decision", json={"decision": "approve", "actor": "dana", "expected_plan_version": 1, "expected_request_seq": request_seq})
         assert ok.status_code == 200
         detail = wait_for_status(client, mid, "resolved")
         assert detail["approvals"][0]["actor"] == "dana"

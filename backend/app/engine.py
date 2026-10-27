@@ -320,11 +320,15 @@ class Engine:
 
         await self._locked(finish)
 
-    async def update_plan(self, mission_id: str, plan_data: Any, actor: str) -> int:
+    async def update_plan(
+        self, mission_id: str, plan_data: Any, actor: str, *, expected_plan_version: int | None = None
+    ) -> int:
         def update() -> int:
             mission = self._mission(mission_id)
             if mission["status"] not in PRE_START:
                 raise EngineError(f"plan can only be edited before start (mission is {mission['status']})")
+            if expected_plan_version is not None and mission["plan_version"] != expected_plan_version:
+                raise EngineError(f"plan changed from v{expected_plan_version} to v{mission['plan_version']}; refresh before editing")
             plan = validate_plan(plan_data, self.fleet, self._constraints(mission))
             version = self.store.add_plan_version(mission_id, plan.model_dump(), "operator", actor)
             self.store.update_mission(
@@ -338,11 +342,13 @@ class Engine:
 
         return await self._locked(update)
 
-    async def start_mission(self, mission_id: str, actor: str) -> None:
+    async def start_mission(self, mission_id: str, actor: str, *, expected_plan_version: int | None = None) -> None:
         def start() -> None:
             mission = self._mission(mission_id)
             if mission["status"] != "ready":
                 raise EngineError(f"mission cannot start from status {mission['status']}")
+            if expected_plan_version is not None and mission["plan_version"] != expected_plan_version:
+                raise EngineError(f"plan changed from v{expected_plan_version} to v{mission['plan_version']}; refresh before starting")
             conflict = work_order_conflict(mission["work_order"], self._constraints(mission))
             if conflict:
                 raise InvalidRequest(conflict)
@@ -355,15 +361,27 @@ class Engine:
 
         await self._locked(start)
 
-    async def decide_approval(self, mission_id: str, task_id: str, decision: str, actor: str, comment: str) -> None:
+    async def decide_approval(
+        self, mission_id: str, task_id: str, decision: str, actor: str, comment: str,
+        *, expected_plan_version: int | None = None, expected_request_seq: int | None = None,
+    ) -> None:
         if decision not in ("approve", "reject"):
             raise EngineError("decision must be 'approve' or 'reject'")
 
         def decide() -> None:
-            self._mission(mission_id)
+            mission = self._mission(mission_id)
             task = self._task(mission_id, task_id)
             if task["status"] != "awaiting_approval":
                 raise EngineError(f"task {task_id} is not awaiting approval (status {task['status']})")
+            if expected_plan_version is not None and mission["plan_version"] != expected_plan_version:
+                raise EngineError("plan changed since this approval was shown; refresh before deciding")
+            if expected_request_seq is not None:
+                requests = [
+                    e for e in self.store.events(mission_id, ("approval_requested",))
+                    if e["data"].get("task_id") == task_id
+                ]
+                if not requests or requests[-1]["seq"] != expected_request_seq:
+                    raise EngineError("approval request changed; refresh before deciding")
             self.store.insert_approval(
                 {
                     "id": new_id("ap"),
@@ -1049,6 +1067,7 @@ class Engine:
         versions = self.store.plan_versions(mission_id)
         return {
             "mission": mission,
+            "intake_conflict": work_order_conflict(mission["work_order"], self._constraints(mission)),
             "plan_versions": versions,
             "current_plan": next((v for v in versions if v["version"] == mission["plan_version"]), None),
             "tasks": tasks,

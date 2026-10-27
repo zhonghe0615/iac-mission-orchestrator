@@ -66,6 +66,7 @@ Each command and event is handled in one SQLite transaction together with its au
 | --- | --- | --- |
 | Durability | SQLite transactions, outbox, restart recovery | Postgres with the same outbox, or a workflow engine; per-mission locks instead of one process lock |
 | Idempotent commands | Idempotency keys on operator commands; robot deduplicates by command ID | Durable dedupe in the integration layer; key expiry |
+| Concurrent operators | Plan edits and starts compare the reviewed plan version; approvals compare the current request sequence; stale actions return 409 | Authenticated operator identity and richer collaborative review UX |
 | Timeouts, unknown outcomes | Retry-safe work rerouted; repair pauses for the operator | Status query and reconciliation before escalating |
 | Stale or duplicate events | Inbox by event ID; events for closed attempts ignored | Per-robot sequence numbers to detect gaps |
 | Robot or network loss | Heartbeat lease; unreachable versus offline | Lease tuned per network (5–10 s on industrial Wi-Fi); state query on return |
@@ -216,7 +217,7 @@ These are proposed pilot measures. The prototype's audit-derived metrics are use
 
 ## 9. Evaluation criteria: implementation and evidence
 
-All five evaluation signals are addressed within the prototype's scope. The latest local verification passed 78 backend tests; the frontend production build and browser walkthrough were also verified. These results establish software behavior with simulated robots, not production or physical-safety readiness. See [VERIFICATION.md](VERIFICATION.md) for supporting verification details.
+All five evaluation signals are addressed within the prototype's scope. The backend test suite, frontend production build, and browser walkthrough were verified locally. These results establish software behavior with simulated robots, not production or physical-safety readiness. See [VERIFICATION.md](VERIFICATION.md) for supporting verification details.
 
 | Evaluation signal | Implemented in the prototype | Evidence | Boundary and next deployment step |
 | --- | --- | --- | --- |

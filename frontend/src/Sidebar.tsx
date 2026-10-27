@@ -73,32 +73,37 @@ const DEFAULT_WORK_ORDER =
   "Operators report a suspected leak near the east weld seam of storage tank T-101. " +
   "Inspect the tank, collect evidence, and resolve the defect if one is confirmed.";
 
+export type WorkOrderDraft = { workOrder: string; target: string; allowRepair: boolean; planner: string };
+
 export function NewMissionForm({
   config,
   site,
   operator,
   onCreated,
+  draft,
 }: {
   config: Config | null;
   site: SiteContext | null;
   operator: string;
   onCreated: (d: MissionDetail) => void;
+  draft?: WorkOrderDraft;
 }) {
-  const [workOrder, setWorkOrder] = useState(DEFAULT_WORK_ORDER);
-  const [target, setTarget] = useState("tank-T101");
-  const [allowRepair, setAllowRepair] = useState(true);
-  const [planner, setPlanner] = useState("");
+  const [workOrder, setWorkOrder] = useState(draft?.workOrder ?? DEFAULT_WORK_ORDER);
+  const [target, setTarget] = useState(draft?.target ?? "tank-T101");
+  const [allowRepair, setAllowRepair] = useState(draft?.allowRepair ?? true);
+  const [planner, setPlanner] = useState(draft?.planner ?? "");
   const action = useAction();
 
   useEffect(() => {
-    if (config && !planner) setPlanner(config.default_planner);
+    if (config && !config.planners.some((p) => p.mode === planner)) setPlanner(config.default_planner);
   }, [config, planner]);
 
   const llmAvailable = config?.planners.some((p) => p.mode === "llm");
 
   return (
-    <section className="panel">
+    <section className="panel" id="new-work-order">
       <h3>New work order</h3>
+      {draft && <p className="hint">Copied from a blocked mission. Correct the text or fields before submitting a new mission; the original remains in the audit history.</p>}
       <textarea rows={5} value={workOrder} onChange={(e) => setWorkOrder(e.target.value)} />
       <Suggestions
         current={workOrder}

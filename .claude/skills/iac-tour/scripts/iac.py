@@ -39,13 +39,15 @@ def call(method: str, path: str, body: dict | None = None):
 def show(mid: str, events: int = 8) -> dict:
     d = call("GET", f"/missions/{mid}")
     m = d["mission"]
-    print(f"{m['id']}  {m['status']}  target={m['target']} repairs={'yes' if m['allow_repair'] else 'no'}")
+    print(f"{m['id']}  {m['status']}  plan_v={m['plan_version']} target={m['target']} repairs={'yes' if m['allow_repair'] else 'no'}")
     if m["status_reason"]:
         print(f"  why: {m['status_reason']}")
     for t in d["tasks"]:
         attempts = ", ".join(f"{a['robot_id']}:{a['status']}" for a in t["attempts"]) or "-"
         finding = f" finding={t['finding']}" if t.get("finding") else ""
         print(f"  {t['task_id']:4} {t['action']:20} {t['status']:18} attempts=[{attempts}]{finding}")
+        if t["status"] == "awaiting_approval":
+            print(f"       approval request seq={approval_request_seq(d, t['task_id'])}")
     if not d["tasks"] and d["current_plan"]:
         for t in d["current_plan"]["plan"]["tasks"]:
             print(f"  plan {t['id']}: {t['action']} after {t['depends_on'] or '-'}")
@@ -69,12 +71,16 @@ def wait(mid: str, statuses: set[str], timeout: float) -> dict:
     sys.exit(f"stopped waiting: status is {d['mission']['status']}, wanted {sorted(statuses)}")
 
 
-def pending_approval(mid: str) -> str:
-    tasks = call("GET", f"/missions/{mid}")["tasks"]
-    task = next((t for t in tasks if t["status"] == "awaiting_approval"), None)
-    if task is None:
-        sys.exit("no task is awaiting approval")
-    return task["task_id"]
+def approval_request_seq(detail: dict, task_id: str) -> int:
+    request = next(
+        (e for e in reversed(detail["events"]) if e["kind"] == "approval_requested" and e["data"].get("task_id") == task_id),
+        None,
+    )
+    if request is None:
+        if any(t["task_id"] == task_id and t["status"] == "awaiting_approval" for t in detail["tasks"]):
+            sys.exit("approval request is missing; refresh the mission")
+        return 1  # Let the server report that this task is not awaiting approval.
+    return request["seq"]
 
 
 def main(argv: list[str]) -> None:
@@ -87,14 +93,14 @@ Commands:
                                         submit a work order (TARGET defaults to tank-T101)
   show MID                              mission status, tasks, attempts, recent events
   wait MID STATUS[,STATUS] [SECONDS]    wait for a status (default 60 s)
-  start MID | cancel MID
-  approve MID [TASK] | reject MID [TASK] [COMMENT]
+  start MID PLAN_VERSION | cancel MID
+  approve MID TASK REQUEST_SEQ | reject MID TASK REQUEST_SEQ [COMMENT]
   retry MID TASK
   fault ROBOT FAULT                     offline, online, lose_silently, fail_next, hang_next,
                                         duplicate_next, reorder_next, clear
   defect ASSET on|off                   set the simulated defect on a tank
-  plan MID                              print the current plan as JSON (redirect to a file to edit)
-  edit MID PLAN.json                    submit an edited plan (validated by the backend)
+  plan MID                              print the current plan and its version as JSON
+  edit MID PLAN.json                    submit a versioned plan file from 'plan MID'
   events MID [KIND]                     full timeline, optionally one event kind
   metrics""")
         return
@@ -118,11 +124,23 @@ Commands:
     elif cmd == "wait":
         wait(args[0], set(args[1].split(",")), float(args[2]) if len(args) > 2 else 60)
     elif cmd in ("start", "cancel"):
-        call("POST", f"/missions/{args[0]}/{cmd}", actor)
+        body = dict(actor)
+        if cmd == "start":
+            if len(args) < 2:
+                sys.exit("specify the reviewed plan version shown by 'iac show MID'")
+            body["expected_plan_version"] = int(args[1])
+        call("POST", f"/missions/{args[0]}/{cmd}", body)
         show(args[0])
     elif cmd in ("approve", "reject"):
-        task = args[1] if len(args) > 1 else pending_approval(args[0])
-        body = {"decision": cmd, "comment": args[2] if len(args) > 2 else "", **actor}
+        if len(args) < 3:
+            sys.exit("specify TASK and REQUEST_SEQ shown by 'iac show MID'")
+        task = args[1]
+        detail = call("GET", f"/missions/{args[0]}")
+        body = {
+            "decision": cmd, "comment": args[3] if len(args) > 3 else "",
+            "expected_plan_version": detail["mission"]["plan_version"],
+            "expected_request_seq": int(args[2]), **actor,
+        }
         call("POST", f"/missions/{args[0]}/tasks/{task}/decision", body)
         show(args[0])
     elif cmd == "retry":
@@ -135,11 +153,17 @@ Commands:
         call("POST", f"/sim/assets/{args[0]}", {"defect_present": args[1] == "on"})
         print(f"{args[0]}: defect {'present' if args[1] == 'on' else 'absent'}")
     elif cmd == "plan":
-        print(json.dumps((call("GET", f"/missions/{args[0]}")["current_plan"] or {}).get("plan"), indent=2))
+        detail = call("GET", f"/missions/{args[0]}")
+        print(json.dumps({
+            "expected_plan_version": detail["mission"]["plan_version"],
+            "plan": (detail["current_plan"] or {}).get("plan"),
+        }, indent=2))
     elif cmd == "edit":
         with open(args[1]) as f:
-            plan = json.load(f)
-        call("PUT", f"/missions/{args[0]}/plan", {"plan": plan, **actor})
+            draft = json.load(f)
+        if not isinstance(draft, dict) or "expected_plan_version" not in draft or "plan" not in draft:
+            sys.exit("plan file must come from 'iac plan MID'; edit its plan field")
+        call("PUT", f"/missions/{args[0]}/plan", {**draft, **actor})
         show(args[0])
     elif cmd == "events":
         for e in call("GET", f"/missions/{args[0]}")["events"]:
