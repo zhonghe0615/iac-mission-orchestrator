@@ -17,8 +17,6 @@ Implementation, test suites, UI styling, documentation drafts, and repetitive ve
 
 ## Decisions I made
 
-These came from me, not from a suggestion by the tools:
-
 - **Stack and model:** React and TypeScript, FastAPI, SQLite. I chose `gpt-6-luna` as the planning model, with its exact ID confirmed from the provider's documentation rather than substituted.
 - **Scope:** finish the required end-to-end slice first, then pursue bonuses.
 - **Portability:** the reviewer must be able to run the project easily. This led to committing the built UI so that only Python is needed, plus pip and uv setup paths tested from a fresh clone.
