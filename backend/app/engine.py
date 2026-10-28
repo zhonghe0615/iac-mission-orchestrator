@@ -101,6 +101,9 @@ class Engine:
         self._loop: asyncio.AbstractEventLoop | None = None
         # Set when a robot may have become available; waiting missions are re-checked before commit.
         self._robots_freed = False
+        # Highest progress sequence accepted per open attempt. In memory is enough: after a
+        # restart no earlier attempt is still running, so its progress is ignored anyway.
+        self._progress_seq: dict[str, int] = {}
 
     # Lifecycle
 
@@ -500,6 +503,10 @@ class Engine:
                 )
             return
 
+        if ev.type == "progress":
+            self._on_progress(attempt, ev, label)
+            return
+
         if ev.type == "cancelled":
             if attempt["status"] == "cancel_requested":
                 self._close_attempt(attempt, "cancelled", "Robot confirmed cancellation")
@@ -517,6 +524,56 @@ class Engine:
             self._attempt_succeeded(attempt, ev.payload.get("finding"), ev.payload.get("data", {}))
         else:
             self._attempt_failed(attempt, "failed", ev.payload.get("error", "action failed"), outcome_known=True)
+
+    def _on_progress(self, attempt: dict, ev: RobotEvent, label: str) -> None:
+        """Record an intermediate step. Progress never completes a task or creates evidence,
+        and it does not extend the attempt's deadline."""
+        mission_id, p = attempt["mission_id"], ev.payload
+        seq = p.get("seq")
+        if ev.robot_id != attempt["robot_id"]:
+            problem = f"sent by {self.fleet.name(ev.robot_id)}, but the attempt runs on {self.fleet.name(attempt['robot_id'])}"
+        elif attempt["status"] != "running":
+            problem = f"attempt is already {attempt['status']}"
+        elif not isinstance(seq, int) or seq <= self._progress_seq.get(attempt["id"], 0):
+            problem = "repeated or out of order"
+        else:
+            problem = None
+        if problem:
+            self._event(
+                mission_id, "stale_event_ignored", f"Ignored progress from {label}: {problem}", attempt_id=attempt["id"], progress=p
+            )
+            return
+        self._progress_seq[attempt["id"]] = seq
+        where = p.get("location", "")
+        if p.get("stage") == "navigating":
+            step = f"navigating to {where}"
+        elif p.get("stage") == "arrived":
+            pos = p.get("position")
+            at = f" at ({', '.join(f'{v:g}' for v in pos)}) in frame {p.get('frame_id')}" if pos else ""
+            step = f"reached {where}{at}"
+        elif "temperature_delta_c" in p:
+            step = f"thermal capture at {where}: delta {p['temperature_delta_c']:.1f} °C"
+        elif "observation" in p:
+            step = f"visual capture at {where}: {p['observation']}"
+        else:
+            step = f"{p.get('procedure', p.get('operation'))} finished at {where}"
+        name = self.fleet.name(ev.robot_id)
+        counter = f"step {p.get('step')}/{p.get('total_steps')}"
+        self._event(
+            mission_id,
+            "robot_progress",
+            f"{name} {step} ({attempt['task_id']} {counter})",
+            attempt_id=attempt["id"],
+            robot_id=ev.robot_id,
+            task_id=attempt["task_id"],
+            progress=p,
+        )
+        self.store.update_task(
+            mission_id,
+            attempt["task_id"],
+            status_reason=f"Running on {name} (attempt {attempt['attempt_no']}): {counter}, {step}",
+        )
+        self._refresh_mission(mission_id)
 
     def _on_robot_status(self, robot_id: str, online: bool, reason: str | None = None) -> None:
         """Announced status events and heartbeat-lease expiry both arrive here.
@@ -601,6 +658,7 @@ class Engine:
     def _close_attempt(self, attempt: dict, status: str, detail: str) -> None:
         self.store.update_attempt(attempt["id"], status=status, detail=detail, ended_at=time.time())
         self._cancel_timer(attempt["id"])
+        self._progress_seq.pop(attempt["id"], None)
         robot = self.store.robot(attempt["robot_id"])
         if robot["reserved_attempt"] == attempt["id"]:
             self.store.update_robot(attempt["robot_id"], reserved_attempt=None)
@@ -943,7 +1001,11 @@ class Engine:
             passed_over=reasons,
         )
         self._outbox.append(
-            _Outbox("dispatch", attempt_id, Command(attempt_id, robot_id, task["action"], dict(task["args"])))
+            _Outbox(
+                "dispatch",
+                attempt_id,
+                Command(attempt_id, robot_id, task["action"], dict(task["args"]), deadline_at=now + timeout * self.time_scale),
+            )
         )
         return True
 

@@ -24,13 +24,16 @@ class Command:
     robot_id: str
     action: str
     args: dict[str, str]
+    # Wall-clock time after which the orchestrator treats the outcome as unknown.
+    deadline_at: float | None = None
 
 
 @dataclass(frozen=True)
 class RobotEvent:
     event_id: str
     robot_id: str
-    # accepted | completed | failed | cancelled | status
+    # accepted | progress | completed | failed | cancelled | status
+    # progress reports an intermediate step of a running command; it never completes one.
     type: str
     command_id: str | None = None
     payload: dict = field(default_factory=dict)

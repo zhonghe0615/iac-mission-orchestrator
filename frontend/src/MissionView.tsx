@@ -431,11 +431,48 @@ function TaskBoard({ detail, robots }: { detail: MissionDetail; robots: Robot[] 
   );
 }
 
+// Shown separately (samples, raw operations) or as provenance, not in the one-line summary.
+const DETAIL_KEYS = new Set([
+  "samples",
+  "operations",
+  "source",
+  "map_id",
+  "route_id",
+  "route_version",
+  "simulated",
+  "waypoint_id",
+  "acquired_at",
+  "completed_at",
+  "anomaly_threshold_c",
+]);
+
+interface Sample {
+  waypoint_id: string;
+  location: string;
+  temperature_delta_c: number;
+  acquired_at: number;
+}
+
+function formatValue(key: string, value: unknown): string {
+  if (typeof value === "number" && key.endsWith("_c")) return `${value.toFixed(1)} °C`;
+  if (typeof value === "object" && value !== null) return JSON.stringify(value);
+  return String(value);
+}
+
 function formatData(data: Record<string, unknown>): string {
   return Object.entries(data)
-    .filter(([k]) => k !== "image")
-    .map(([k, v]) => `${label(k)}: ${v}`)
+    .filter(([k]) => !DETAIL_KEYS.has(k))
+    .map(([k, v]) => `${label(k)}: ${formatValue(k, v)}`)
     .join(", ");
+}
+
+function provenanceOf(data: Record<string, unknown>): string {
+  const parts = [
+    typeof data.source === "string" && data.source,
+    typeof data.map_id === "string" && `map ${data.map_id} v${data.route_version}`,
+    typeof data.route_id === "string" && `route ${data.route_id}`,
+  ].filter(Boolean);
+  return parts.join(" · ");
 }
 
 function EvidenceList({ evidence }: { evidence: Evidence[] }) {
@@ -444,22 +481,68 @@ function EvidenceList({ evidence }: { evidence: Evidence[] }) {
     <section className="card">
       <h3>Evidence</h3>
       <ul className="evidence">
-        {evidence.map((e) => (
-          <li key={e.id}>
-            <span className="mono">{e.task_id}</span> <strong>{e.finding ? label(e.finding) : ""}</strong>{" "}
-            {formatData(e.data)}
-            <div className="hint">
-              {e.provenance} at {time(e.created_at)}
-              {typeof e.data.image === "string" && <> · artifact {e.data.image}</>}
-            </div>
-          </li>
-        ))}
+        {evidence.map((e) => {
+          const samples = Array.isArray(e.data.samples) ? (e.data.samples as Sample[]) : [];
+          const threshold = typeof e.data.anomaly_threshold_c === "number" ? e.data.anomaly_threshold_c : null;
+          const operations = Array.isArray(e.data.operations) ? e.data.operations : [];
+          return (
+            <li key={e.id}>
+              <span className="mono">{e.task_id}</span> <strong>{e.finding ? label(e.finding) : ""}</strong>{" "}
+              {formatData(e.data)}
+              {e.data.simulated === true && <span className="badge">simulated</span>}
+              {samples.length > 0 && (
+                <table className="samples">
+                  <thead>
+                    <tr>
+                      <th>Station</th>
+                      <th>Thermal delta</th>
+                      <th>Captured</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {samples.map((s) => {
+                      const anomalous = threshold !== null && s.temperature_delta_c >= threshold;
+                      return (
+                        <tr key={s.waypoint_id} className={anomalous ? "anomalous" : undefined}>
+                          <td>
+                            {s.location} <span className="hint mono">{s.waypoint_id}</span>
+                          </td>
+                          <td>
+                            {s.temperature_delta_c.toFixed(1)} °C{anomalous && " · above demo threshold"}
+                          </td>
+                          <td className="hint">{time(s.acquired_at)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+              <div className="hint">
+                {e.provenance} at {time(e.created_at)}
+                {provenanceOf(e.data) && <> · {provenanceOf(e.data)}</>}
+                {threshold !== null && <> · demo anomaly threshold {threshold.toFixed(1)} °C</>}
+              </div>
+              {operations.length > 0 && (
+                <details className="raw-ops">
+                  <summary>Mock robot requests and responses ({operations.length})</summary>
+                  <pre>{JSON.stringify(operations, null, 1)}</pre>
+                </details>
+              )}
+            </li>
+          );
+        })}
       </ul>
     </section>
   );
 }
 
 const QUIET = new Set(["command_accepted", "mission_status"]);
+
+// Departures are implied by the arrival that follows; they show with "Show every event".
+function isQuiet(e: AuditEvent): boolean {
+  const progress = e.data.progress as { stage?: string } | undefined;
+  return QUIET.has(e.kind) || (e.kind === "robot_progress" && progress?.stage === "navigating");
+}
 
 type Severity = "ok" | "warn" | "fail" | "info";
 
@@ -517,7 +600,7 @@ function severity(e: AuditEvent): Severity {
 
 function Timeline({ events }: { events: AuditEvent[] }) {
   const [all, setAll] = useState(false);
-  const shown = (all ? events : events.filter((e) => !QUIET.has(e.kind))).slice().reverse();
+  const shown = (all ? events : events.filter((e) => !isQuiet(e))).slice().reverse();
   return (
     <section className="card">
       <div className="card-head">

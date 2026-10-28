@@ -14,7 +14,7 @@ If an LLM is configured, choose the LLM planner; otherwise the fixture planner i
 
 ## 2. Execution, failure, and recovery (about 90 s)
 
-1. Click **Start mission**. Scout A is chosen for the thermal inspection: it has the required capabilities and the highest routing preference.
+1. Click **Start mission**. Scout A is chosen for the thermal inspection: it has the required capabilities and the highest routing preference. The task status follows the robot around T-101's four stations ("step 3/8, reached east weld seam"), and the timeline shows each arrival and thermal capture.
 2. While t1 is running, expand **Simulate a failure** under Scout A in the Fleet panel, then click **Take offline**.
 3. Show the result: attempt 1 is `lost` ("outcome unknown"), the inspection is retry-safe, and attempt 2 goes to Scout B. Both attempts stay in the task row, and the mission is the same mission.
 4. Optional: click **Bring online** on Scout A afterwards.
@@ -27,9 +27,9 @@ Variation (no replacement): take Scout B offline before starting, then Scout A w
 
 ## 3. Approval (about 60 s)
 
-1. After the visual inspection, the mission pauses with "Waiting for your approval". The card shows the evidence the request is based on (thermal anomaly, ΔT 18.4 °C).
+1. After the visual inspection, the mission pauses with "Waiting for your approval". The card shows the evidence the request is based on (thermal anomaly, ΔT 18.4 °C at the east weld seam). In the Evidence panel, the thermal result lists each station's reading, highlights the one above the demo threshold, and can expand to the raw mock robot requests and responses.
 2. Show the policy decisions in the timeline: each dispatch lists its checks.
-3. Click **Approve repair**. Manipulator C repairs, a Scout verifies, and the mission closes as **resolved**.
+3. Click **Approve repair**. Manipulator C travels to the east weld seam and runs the simulated procedure, a Scout takes a fresh reading there, and the mission closes as **resolved**.
 
 ## 4. Denial (about 30 s)
 

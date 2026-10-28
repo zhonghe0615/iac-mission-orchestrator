@@ -197,7 +197,7 @@ const FAULTS: { fault: string; text: string; help: string }[] = [
   {
     fault: "fail_next",
     text: "Fail next",
-    help: "The next command reports an explicit error. Expect: an inspection is retried on another robot; a repair escalates to you.",
+    help: "The next command's last navigation fails (path blocked), after any earlier captures on the route. Expect: no capture at that station; an inspection is retried on another robot from the start of its route; a repair escalates to you.",
   },
   {
     fault: "hang_next",

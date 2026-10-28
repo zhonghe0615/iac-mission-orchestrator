@@ -52,7 +52,25 @@ Each command and event is handled in one SQLite transaction together with its au
 | Orchestration ↔ Robot Integration Layer | Typed commands and events, status, heartbeats, cancellation. No motion primitives. |
 | Orchestration → operator UI | Read models for missions, tasks, attempts, evidence, robots; a change stream. |
 
-**Communication protocol: demo versus production.** The demo uses HTTP/JSON at its API boundary to simplify setup, inspection, and integration, with Pydantic schemas validating requests. The simulated Robot Integration Layer currently runs in-process rather than over a network. For production service-to-service communication between orchestration and the Robot Integration Layer, the proposed choice is gRPC with Protobuf: explicit versioned schemas and generated clients support integration across languages and services, while binary serialization and streaming support efficient communication. Browser-facing APIs can remain HTTP/JSON. This is a proposed production evolution, not an implemented transport; command IDs, event correlation, approval rules, deduplication, and unknown-outcome handling remain unchanged and must still be enforced by application code.
+**Communication protocol: demo versus production.** The demo deliberately uses Python models and JSON to keep setup and inspection simple. Pydantic validates API and mock-operation schemas; JSON does not mean that requests are unconstrained. The simulated Robot Integration Layer runs in-process, with Python objects rather than an actual network transport between it and orchestration. Browser-facing APIs use HTTP/JSON.
+
+For production service-to-service communication between orchestration and the Robot Integration Layer, the planned direction is Protobuf contracts with gRPC. Shared `.proto` definitions and generated types/clients would support Python, Go, and C++ integrations, with explicit schema evolution and efficient binary communication. Introduce this when extracting the integration layer into a service or adding independently deployed adapters in different languages. Preserve field numbers, reserve removed fields, and test compatibility between supported producer and consumer versions. The browser API and human-maintained site configuration can remain JSON; OEM adapters continue to use each vendor's native SDK or protocol. Protobuf is an interface definition and serialization mechanism, not a programming language or a substitute for runtime validation. Units, coordinate frames, valid ranges, state transitions, command deduplication, and approval rules still require explicit application checks. This is a production plan, not an implemented Protobuf/gRPC transport.
+
+**Spatial contract (implemented in the demo).** A waypoint is one navigation destination; a route is an ordered list of waypoint IDs to inspect. `backend/config/inspection_routes.json` declares the frame and units once at map level and lists waypoint objects with an ID, a label, a fixed-length `[x, y, z]` position, and `yaw_rad` where the robot must face the tank. Positions are validated as exactly three finite numbers (strings, booleans, NaN, and infinity are rejected), and the file must mark itself `synthetic`. A bare array of coordinate arrays would lose the ID and label associations. Excerpt:
+
+```json
+{
+  "frame_id": "site",
+  "units": "m",
+  "synthetic": true,
+  "waypoints": [
+    {"waypoint_id": "T101-south-access", "label": "south access", "position": [0.0, -6.0, 0.0], "yaw_rad": 1.5708},
+    {"waypoint_id": "T101-east-seam", "label": "east weld seam", "position": [6.0, 0.0, 0.0], "yaw_rad": 3.1416}
+  ]
+}
+```
+
+The values are synthetic robot standing positions around fictional tanks (T-101 at the origin), all on flat ground with `z = 0`. Sensor mounting height and the physical inspection or repair target are separate concepts and are not modelled. The adapter puts the destination pose in each mock navigation request; the mock robot rejects a pose that does not match the waypoint ID and reports the reached pose in its `reached_goal` feedback, which the engine audits without reading the map. Thermal inspection visits all four stations and captures only after confirmed arrival; repair navigates directly to the service waypoint. There is no path planning, obstacle avoidance, or physics: the robot's own navigation layer would own travel between destinations. A future Protobuf `Vector3` should use named `x`, `y`, and `z` fields; a repeated numeric field alone does not enforce a length of three. Synthetic coordinates do not establish traversability, collision avoidance, or compatibility with a real GraphNav map.
 
 **Shared** across robot types: capability names, the action catalog, mission/task/attempt state, evidence, and events. **Robot- or OEM-specific:** how an action is executed, sensor formats, local safety, and fleet-manager scheduling.
 
@@ -203,7 +221,7 @@ These are proposed pilot measures. The prototype's audit-derived metrics are use
   - metrics;
   - the operator UI.
 - **Simulated:**
-  - robot execution and findings;
+  - robot execution: mock navigation, sensor, and procedure operations over a fictional route map, with findings derived from the simulated readings ([ROBOT_INTEGRATION.md](ROBOT_INTEGRATION.md));
   - the tank and its defect, saved next to the database so they survive a restart;
   - faults, injected from the UI.
 

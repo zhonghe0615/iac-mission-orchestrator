@@ -131,13 +131,13 @@ See [docs/DEMO.md](docs/DEMO.md) for the full walkthrough. In short:
 
 | Implemented (real code paths) | Simulated |
 | --- | --- |
-| LLM planning harness, structured output, validation, bounded correction | Robots: actions are timers that return scripted findings |
-| Plan validation for model and operator plans, including the operator's target and repair constraint | Sensor data and images (placeholder values and `sim://` references) |
+| LLM planning harness, structured output, validation, bounded correction | Robots: each action runs as mock navigation, sensor, and procedure operations over a fictional route map (see [docs/ROBOT_INTEGRATION.md](docs/ROBOT_INTEGRATION.md)) |
+| Plan validation for model and operator plans, including the operator's target and repair constraint | Sensor readings (fixed thermal deltas and observations; findings use a demo-only threshold); no images |
 | Mission/task/attempt state machine, dependencies, conditions | The tanks and the T-101 defect (saved next to the database, so a repair survives a restart; deleting the database resets them) |
 | Capability routing, reservations, policy checks | Network faults (injected explicitly by the operator) |
 | Approval binding to plan version and action, single use | |
 | Timeouts, retries, reassignment, escalation, cancellation semantics | |
-| Duplicate and stale event handling | |
+| Duplicate and stale event handling, including per-step robot progress | |
 | SQLite persistence, audit log, restart recovery | |
 | Metrics, operator console, live updates (server-sent events) | |
 
@@ -151,7 +151,9 @@ backend/
   app/plan.py        plan schema and validation
   app/planner.py     LLM planning harness and fixture planner
   app/engine.py      execution engine and state machine
-  app/simulator.py   simulated fleet with fault injection
+  app/simulator.py   simulated fleet: action recipes over site routes, fault injection
+  app/mock_robot.py  typed mock navigation, sensor, and procedure API
+  config/            fleet types and robots; fictional inspection routes
   app/robots.py      robot command/event interface
   app/store.py       SQLite persistence and audit log
   app/main.py        HTTP API and live update stream

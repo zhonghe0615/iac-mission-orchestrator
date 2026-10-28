@@ -1,0 +1,30 @@
+{
+  "map_id": "north-tank-farm-v1",
+  "version": 2,
+  "note": "Fictional mock map for the simulated North Tank Farm. Coordinates are synthetic robot standing positions on flat ground, not a surveyed site or a real GraphNav map. T-101 is centered at the origin and T-102 at (20, 0); yaw faces the tank.",
+  "frame_id": "site",
+  "units": "m",
+  "synthetic": true,
+  "waypoints": [
+    {"waypoint_id": "T101-south-access", "label": "south access", "position": [0.0, -6.0, 0.0], "yaw_rad": 1.5708},
+    {"waypoint_id": "T101-east-seam", "label": "east weld seam", "position": [6.0, 0.0, 0.0], "yaw_rad": 3.1416},
+    {"waypoint_id": "T101-north-shell", "label": "north shell", "position": [0.0, 6.0, 0.0], "yaw_rad": -1.5708},
+    {"waypoint_id": "T101-west-shell", "label": "west shell", "position": [-6.0, 0.0, 0.0], "yaw_rad": 0.0},
+    {"waypoint_id": "T102-south-access", "label": "south access", "position": [20.0, -6.0, 0.0], "yaw_rad": 1.5708},
+    {"waypoint_id": "T102-east-seam", "label": "east weld seam", "position": [26.0, 0.0, 0.0], "yaw_rad": 3.1416},
+    {"waypoint_id": "T102-north-shell", "label": "north shell", "position": [20.0, 6.0, 0.0], "yaw_rad": -1.5708},
+    {"waypoint_id": "T102-west-shell", "label": "west shell", "position": [14.0, 0.0, 0.0], "yaw_rad": 0.0}
+  ],
+  "assets": {
+    "tank-T101": {
+      "route_id": "T101-perimeter",
+      "stations": ["T101-south-access", "T101-east-seam", "T101-north-shell", "T101-west-shell"],
+      "service_waypoint": "T101-east-seam"
+    },
+    "tank-T102": {
+      "route_id": "T102-perimeter",
+      "stations": ["T102-south-access", "T102-east-seam", "T102-north-shell", "T102-west-shell"],
+      "service_waypoint": "T102-east-seam"
+    }
+  }
+}

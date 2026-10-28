@@ -372,6 +372,22 @@ select {
   font-size: 12.5px;
 }
 
+table.samples {
+  margin: 4px 0;
+  font-size: 12px;
+}
+
+table.samples tr.anomalous td {
+  background: var(--warn-bg);
+}
+
+.raw-ops pre {
+  white-space: pre-wrap;
+  max-height: 240px;
+  overflow: auto;
+  font-size: 11px;
+}
+
 .metrics {
   display: grid;
   grid-template-columns: 1fr 1fr;
