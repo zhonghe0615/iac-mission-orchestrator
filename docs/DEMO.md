@@ -8,14 +8,14 @@ If an LLM is configured, choose the LLM planner; otherwise the fixture planner i
 
 1. Keep the default work order about tank T-101, with target **Storage Tank T-101** and **Allow repairs** ticked, and click **Generate plan**.
 2. Point out the plan source next to the version ("LLM planner" or "fixture planner"), and the planner call in the timeline. For the LLM, expand it to show the raw output and latency.
-3. Click **Edit plan**, delete the `condition` from the repair task, and click **Validate and save**. The backend rejects it: a repair must be conditioned on `defect_detected`. Click **Reset**.
+3. Click **Edit plan**, delete the `condition` from the repair task, and click **Validate and save as new version**. The backend rejects it: a repair must be conditioned on `defect_detected`. Click **Discard changes**.
 4. Note that the plan has no robot or approval fields: routing and approval belong to the orchestrator.
 5. Optional, with the LLM planner: click the **Survey only, no repairs** example. It sets the target to T-102 and clears **Allow repairs**. The plan is a single inspection of T-102. A plan for another asset, or one with a repair, would be rejected and sent back to the model.
 
 ## 2. Execution, failure, and recovery (about 90 s)
 
 1. Click **Start mission**. Scout A is chosen for the thermal inspection: it has the required capabilities and the highest routing preference.
-2. While t1 is running, click **Take offline** on Scout A in the Fleet panel.
+2. While t1 is running, expand **Simulate a failure** under Scout A in the Fleet panel, then click **Take offline**.
 3. Show the result: attempt 1 is `lost` ("outcome unknown"), the inspection is retry-safe, and attempt 2 goes to Scout B. Both attempts stay in the task row, and the mission is the same mission.
 4. Optional: click **Bring online** on Scout A afterwards.
 

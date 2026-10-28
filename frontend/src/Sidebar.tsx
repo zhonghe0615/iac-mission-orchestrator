@@ -224,8 +224,6 @@ const AVAILABILITY_HELP: Record<string, string> = {
   healthy: "Clears the unresponsive mark after a timeout, asserting the robot is usable again.",
   clear: "Disarms faults that have not been used yet.",
 };
-const FLEET_HELP = "Fault buttons apply to a robot's next command, one per command. Hover one to see what it does.";
-
 // Types with more robots than this start collapsed and show a filtered, capped list.
 const EXPANDED_LIMIT = 8;
 const LIST_LIMIT = 50;
@@ -252,7 +250,6 @@ export function FleetPanel({
   return (
     <section className="panel">
       <h3>Fleet</h3>
-      <p className="hint">{FLEET_HELP}</p>
       {robots.types.map((t) => (
         <RobotTypeGroup
           key={t.id}
@@ -391,39 +388,41 @@ function RobotRow({
           </button>
         </div>
       )}
-      <div className="fault-title">Inject failure</div>
-      <div className="fault-row" role="group" aria-label={`Inject failure on ${r.name}`}>
-        {sim.online ? (
-          <>
-            <button className="small danger" onClick={() => onFault(r.id, "offline")} {...explain(AVAILABILITY_HELP.offline)}>
-              Take offline
+      <details className="fault-controls">
+        <summary>Simulate a failure</summary>
+        <div className="fault-row" role="group" aria-label={`Inject failure on ${r.name}`}>
+          {sim.online ? (
+            <>
+              <button className="small danger" onClick={() => onFault(r.id, "offline")} {...explain(AVAILABILITY_HELP.offline)}>
+                Take offline
+              </button>
+              <button className="small danger" onClick={() => onFault(r.id, "lose_silently")} {...explain(AVAILABILITY_HELP.silent)}>
+                Lose silently
+              </button>
+            </>
+          ) : (
+            <button className="small" onClick={() => onFault(r.id, "online")} {...explain(AVAILABILITY_HELP.online)}>
+              Bring online
             </button>
-            <button className="small danger" onClick={() => onFault(r.id, "lose_silently")} {...explain(AVAILABILITY_HELP.silent)}>
-              Lose silently
+          )}
+          {r.availability === "unresponsive" && sim.online && (
+            <button className="small" onClick={() => onFault(r.id, "online")} {...explain(AVAILABILITY_HELP.healthy)}>
+              Mark healthy
             </button>
-          </>
-        ) : (
-          <button className="small" onClick={() => onFault(r.id, "online")} {...explain(AVAILABILITY_HELP.online)}>
-            Bring online
-          </button>
-        )}
-        {r.availability === "unresponsive" && sim.online && (
-          <button className="small" onClick={() => onFault(r.id, "online")} {...explain(AVAILABILITY_HELP.healthy)}>
-            Mark healthy
-          </button>
-        )}
-        {FAULTS.map((f) => (
-          <button
-            key={f.fault}
-            className={`small ${sim.pending_faults.includes(f.fault) ? "armed-button" : ""}`}
-            aria-pressed={sim.pending_faults.includes(f.fault)}
-            onClick={() => onFault(r.id, f.fault)}
-            {...explain(f.help)}
-          >
-            {f.text}
-          </button>
-        ))}
-      </div>
+          )}
+          {FAULTS.map((f) => (
+            <button
+              key={f.fault}
+              className={`small ${sim.pending_faults.includes(f.fault) ? "armed-button" : ""}`}
+              aria-pressed={sim.pending_faults.includes(f.fault)}
+              onClick={() => onFault(r.id, f.fault)}
+              {...explain(f.help)}
+            >
+              {f.text}
+            </button>
+          ))}
+        </div>
+      </details>
       {help && <div className="fault-help">{help}</div>}
     </div>
   );

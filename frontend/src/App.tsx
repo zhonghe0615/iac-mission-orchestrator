@@ -27,21 +27,25 @@ export default function App() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [copiedDraft, setCopiedDraft] = useState<(WorkOrderDraft & { nonce: number }) | null>(null);
   const selectedRef = useRef(selected);
+  const refreshSeq = useRef(0);
   selectedRef.current = selected;
 
   const refresh = useCallback(async () => {
+    const seq = ++refreshSeq.current;
     try {
       const [m, r, f, met] = await Promise.all([api.missions(), api.robots(), api.fleetEvents(), api.metrics()]);
+      const id = selectedRef.current ?? m[0]?.id ?? null;
+      const latestDetail = id ? await api.mission(id) : null;
+      if (seq !== refreshSeq.current) return;
       setMissions(m);
       setRobots(r);
       setFleetEvents(f);
       setMetrics(met);
-      const id = selectedRef.current ?? m[0]?.id ?? null;
       if (id !== selectedRef.current) setSelected(id);
-      setDetail(id ? await api.mission(id) : null);
+      setDetail(latestDetail);
       setLoadError(null);
     } catch (e) {
-      setLoadError(e instanceof Error ? e.message : String(e));
+      if (seq === refreshSeq.current) setLoadError(e instanceof Error ? e.message : String(e));
     }
   }, []);
 

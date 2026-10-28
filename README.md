@@ -123,8 +123,8 @@ The suite runs offline: robot timings are scaled down, and the LLM planner is te
 See [docs/DEMO.md](docs/DEMO.md) for the full walkthrough. In short:
 
 1. Submit a work order with its target asset and whether repairs are allowed. Explicit asset or repair-permission conflicts between the text and fields are rejected. Every plan is checked against the fields. The plan appears for review with its source (LLM, fixture, or operator edit). Edit it if needed; every edit is validated. An older blocked mission can be copied into a new work order for correction without changing its audit record.
-2. Start the mission and watch tasks, attempts, evidence, and the timeline update live. Plan edits and starts carry the version the operator reviewed; stale pages cannot overwrite or start a newer plan. Approvals carry the current request's event sequence, so an old approval card cannot authorize a later retry.
-3. Inject faults from the Fleet panel: take a robot offline (announced) or lose it silently (detected by heartbeat), or make its next command fail, time out, arrive twice, or arrive out of order.
+2. Start the mission and watch tasks, attempts, evidence, and the timeline update live. Plan edits and starts carry the version shown in the UI; stale pages cannot overwrite or start a newer plan. Approvals carry the current request's event sequence, so an old approval card cannot authorize a later retry.
+3. Expand **Simulate a failure** for a robot in the Fleet panel. Take it offline (announced) or lose it silently (detected by heartbeat), or make its next command fail, time out, arrive twice, or arrive out of order.
 4. Approve or reject the repair when asked.
 
 ## What is simulated and what is implemented

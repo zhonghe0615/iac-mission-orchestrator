@@ -72,13 +72,14 @@ export function MissionView({
 }) {
   const m = detail.mission;
   const action = useAction();
-  const [reviewedVersion, setReviewedVersion] = useState(m.plan_version);
-  const [planViewKey, setPlanViewKey] = useState(0);
+  const [editingPlan, setEditingPlan] = useState(m.status === "planning_failed" && !detail.current_plan);
+  useEffect(() => {
+    if (m.status === "planning_failed" && !detail.current_plan) setEditingPlan(true);
+  }, [m.status, detail.current_plan]);
   const info = explain(detail);
   const awaiting = detail.tasks.filter((t) => t.status === "awaiting_approval");
   const blocked = detail.tasks.filter((t) => t.status === "failed" || t.status === "needs_intervention");
   const source = detail.current_plan?.source;
-  const planChanged = PRE_START.includes(m.status) && m.plan_version !== reviewedVersion;
 
   return (
     <div className="mission">
@@ -98,8 +99,8 @@ export function MissionView({
           {PRE_START.includes(m.status) && m.plan_version > 0 && (
             <button
               className="primary"
-              disabled={action.busy || m.status !== "ready" || Boolean(detail.intake_conflict) || planChanged}
-              onClick={() => action.run(async () => { await api.start(m.id, operator, reviewedVersion); onChange(); })}
+              disabled={action.busy || m.status !== "ready" || Boolean(detail.intake_conflict) || editingPlan}
+              onClick={() => action.run(async () => { await api.start(m.id, operator, m.plan_version); onChange(); })}
             >
               Start mission
             </button>
@@ -126,24 +127,6 @@ export function MissionView({
           <button onClick={onCopy}>Copy to new work order</button>
         </div>
       )}
-      {planChanged && !detail.intake_conflict && (
-        <div className="error-box" role="alert">
-          <strong>
-            {reviewedVersion === 0
-              ? `Plan v${m.plan_version} is ready for review.`
-              : `Plan changed from v${reviewedVersion} to v${m.plan_version} since this page last reviewed it.`}
-          </strong>
-          <p>Reloading this mission replaces any unsaved plan draft with the latest plan.</p>
-          <button onClick={() => {
-            setReviewedVersion(m.plan_version);
-            setPlanViewKey((current) => current + 1);
-            onChange();
-          }}>
-            Reload latest plan
-          </button>
-        </div>
-      )}
-
       <ProgressBar steps={buildSteps(detail, site, new Map(robots.map((r) => [r.id, r.name])))} />
 
       <div className={`banner status-${m.status}`}>
@@ -161,7 +144,7 @@ export function MissionView({
       ))}
 
       {PRE_START.includes(m.status) ? (
-        <PlanReview key={planViewKey} detail={detail} operator={operator} onChange={onChange} />
+        <PlanReview detail={detail} operator={operator} onChange={onChange} editingPlan={editingPlan} setEditingPlan={setEditingPlan} />
       ) : (
         <TaskBoard detail={detail} robots={robots} />
       )}
@@ -271,17 +254,25 @@ function InterventionCard({
   );
 }
 
-function PlanReview({ detail, operator, onChange }: { detail: MissionDetail; operator: string; onChange: () => void }) {
+function PlanReview({ detail, operator, onChange, editingPlan, setEditingPlan }: {
+  detail: MissionDetail;
+  operator: string;
+  onChange: () => void;
+  editingPlan: boolean;
+  setEditingPlan: (editing: boolean) => void;
+}) {
   const plan = detail.current_plan?.plan;
-  const [editing, setEditing] = useState(!plan);
+  const editing = !plan || editingPlan;
   const [text, setText] = useState(() => JSON.stringify(plan ?? { summary: "", target: detail.mission.target, tasks: [] }, null, 2));
   const [editBaseVersion, setEditBaseVersion] = useState(detail.mission.plan_version);
+  const [dirty, setDirty] = useState(false);
   const action = useAction();
 
   useEffect(() => {
     if (!editing) {
       setText(JSON.stringify(plan ?? { summary: "", target: detail.mission.target, tasks: [] }, null, 2));
       setEditBaseVersion(detail.mission.plan_version);
+      setDirty(false);
     }
   }, [editing, detail.mission.plan_version, detail.mission.target, plan]);
 
@@ -294,7 +285,7 @@ function PlanReview({ detail, operator, onChange }: { detail: MissionDetail; ope
         throw new Error(`Plan is not valid JSON: ${e instanceof Error ? e.message : e}`);
       }
       await api.editPlan(detail.mission.id, parsed, operator, editBaseVersion);
-      setEditing(false);
+      setEditingPlan(false);
       onChange();
     });
 
@@ -305,9 +296,11 @@ function PlanReview({ detail, operator, onChange }: { detail: MissionDetail; ope
           Plan {plan ? `v${detail.current_plan!.version}` : "(none)"}
           {plan && <span className="hint"> from {sourceLabel(detail.current_plan!.source)}</span>}
         </h3>
-        <button className="small" onClick={() => setEditing(!editing)}>
-          {editing ? "Show table" : "Edit plan"}
-        </button>
+        {plan && (
+          <button className="small" onClick={() => setEditingPlan(!editing)}>
+            {editing ? "Cancel editing" : "Edit plan"}
+          </button>
+        )}
       </div>
       {plan && !editing && (
         <>
@@ -327,20 +320,21 @@ function PlanReview({ detail, operator, onChange }: { detail: MissionDetail; ope
             dependencies, cycles and unsafe repair sequencing are rejected. Approval is enforced at runtime and cannot be
             set in the plan.
           </p>
-          <textarea className="mono plan-editor" rows={22} value={text} onChange={(e) => setText(e.target.value)} />
+          <textarea className="mono plan-editor" rows={22} value={text} onChange={(e) => { setText(e.target.value); setDirty(true); }} />
           <div className="row">
-            <button className="primary" disabled={action.busy || editBaseVersion !== detail.mission.plan_version} onClick={save}>
+            <button className="primary" disabled={action.busy || !dirty || editBaseVersion !== detail.mission.plan_version} onClick={save}>
               Validate and save as new version
             </button>
-            {plan && (
+            {plan && (dirty || editBaseVersion !== detail.mission.plan_version) && (
               <button
                 onClick={() => {
                   setText(JSON.stringify(plan, null, 2));
                   setEditBaseVersion(detail.mission.plan_version);
+                  setDirty(false);
                   action.clear();
                 }}
               >
-                {editBaseVersion !== detail.mission.plan_version ? "Load latest plan" : "Reset"}
+                {editBaseVersion !== detail.mission.plan_version ? "Load latest plan" : "Discard changes"}
               </button>
             )}
           </div>
